@@ -3,6 +3,7 @@ import torch
 from typing import Callable, Optional
 import random
 import numpy as np
+from torchvision import transforms
 
 
 class CustomMNISTDataset(datasets.MNIST):
@@ -18,6 +19,11 @@ class CustomMNISTDataset(datasets.MNIST):
     ):
         self.imbalance_r = imbalance_r
         self.noise_r = noise_r
+
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
         super(CustomMNISTDataset, self).__init__(root, train, transform, target_transform, download)
 
     def _load_data(self):
