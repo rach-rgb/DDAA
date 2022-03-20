@@ -1,8 +1,9 @@
 import torch.nn as nn
 import torch.nn.functional as F
+from utils import ReparamModule
 
 
-class LeNet(nn.Module):
+class LeNet(ReparamModule):
     def __init__(self, cfg):
         if cfg.DATA_SET.name == 'MNIST':
             class_num = 10

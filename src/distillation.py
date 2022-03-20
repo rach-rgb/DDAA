@@ -1,50 +1,173 @@
+import logging, torch
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
+import torch.nn as nn
 import torch.nn.functional as F
-import logging
 
 
 class Trainer(object):
-    def __init__(self, model, cfg):
-        self.model = model
-        self.device = cfg.device
-        self.epochs = cfg.TASK.epochs
-        self.train_loader = cfg.train_loader
-        self.optimizer = optim.Adadelta(model.parameters(), lr=cfg.TASK.lr)
-        self.scheduler = StepLR(self.optimizer, step_size=1, gamma=cfg.TASK.decay_factor)
+    def __init__(self, models, cfg):
+        self.cfg = cfg
+        self.models = models  # TODO
+        self.num_data_steps = cfg.DISTILL.steps     # how much data we have
+        self.T = cfg.DISTILL.steps * cfg.DISTILL.epochs     # total number of steps
+        # how much data to distill for each step
+        self.num_per_step = cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class
 
-    def forward(self, model, data, label):
+        self.params = []
+        self.labels = []    # labels (no label distillation)
+        self.data = []      # distilled data
+        self.raw_distill_lrs = []   # learning rate to train task model with distilled data
+        self.init_data()
+
+        self.optimizer = optim.Adam(self.params, lr=cfg.TASK.lr, betas=(0.5, 0.999))
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=cfg.TASK.decay_epochs,
+                                                   gamma=cfg.TASK.decay_factor)
+
+    # initialize label, distilled data and learning rate
+    def init_data(self):
+        cfg = self.cfg
+
+        # labels
+        distill_label = torch.arange(cfg.DATA_SET.num_classes, dtype=torch.long, device=cfg.device)\
+                             .repeat(cfg.DISTILL.num_per_class, 1)
+        distill_label = distill_label.t().reshape(-1)  # [0, 0, ... , 1, 1, ... ]
+        for _ in range(self.num_data_steps):
+            self.labels.append(distill_label)
+
+        # data
+        for _ in range(self.num_data_steps):
+            distill_data = torch.randn(self.num_per_step, cfg.DATA_SET.num_channels, cfg.DATA_SET.input_size,
+                                       cfg.DATA_SET.input_size, device=cfg.device, requires_grad=True)
+            self.data.append(distill_data)
+            self.params.append(distill_data)
+
+        # learning rate
+        raw_init_distill_lr = torch.tensor(cfg.DISTILL.lr, device=cfg.device)
+        raw_init_distill_lr = raw_init_distill_lr.repeat(self.T, 1)
+        self.raw_distill_lrs = raw_init_distill_lr.expml_().log_().requires_grad_()
+        self.params.append(self.raw_distill_lrs)
+
+        for p in self.params:
+            p.grad = torch.zeros_like(p)
+
+    # return label, distilled data and learning rate in a list
+    def get_steps(self):
+        total_data = (x for _ in range(self.cfg.DISTILL.epochs) for x in zip(self.data, self.labels))
+        lrs = F.softplus(self.raw_distill_lrs).unbind()
+
+        steps = []
+        for (data, label), lr in zip(total_data, lrs):
+            steps.append((data, label, lr))
+
+        return steps
+
+    # train task model using distilled data
+    def forward(self, model, rdata, rlabel, steps):
+        cfg = self.cfg
+
+        # forward distilled dataset
         model.train()
-        _data, _label = data.to(self.device), label.to(self.device)
+        w = model.get_param()
+        params = [w]
+        gws = []
 
-        output = model(_data)
-        return F.nll_loss(output, _label)
+        for step, (data, label, lr) in enumerate(steps):
+            with torch.enable_grad():
+                output = model.forward_with_param(data, w)
+                loss = F.cross_entropy(output, label)
+                # calculate gradient of loss w.r.t w
+            gw, = torch.autograd.grad(loss, w, lr.squeeze(), create_graph=True)
 
-    def backward(self, loss):
-        loss.backward()
+            with torch.no_grad():
+                # update weight
+                new_w = w.sub(gw).requires_grad_()
+                params.append(new_w)
+                gws.append(gw)
+                w = new_w
 
-    def prefetch_train_loader_iter(self):
-        device = self.device
-        train_iter = iter(self.train_loader)
-        for epoch in range(self.epochs):
-            niter = len(train_iter)
-            prefetch_it = max(0, niter - 2)
-            for it, val in enumerate(train_iter):
-                # Prefetch (start workers) at the end of epoch BEFORE yielding
-                if it == prefetch_it and epoch < self.epochs - 1:
-                    train_iter = iter(self.train_loader)
-                yield epoch, it, val
+        # calculate loss using train data
+        model.eval()
+        output = model.forward_with_param(rdata, w)
+        tloss = F.cross_entropy(output, rlabel)
+        return tloss, (tloss, params, gws)
+
+    # update distilled data and lr
+    def backward(self, model, steps, saved):
+        tloss, params, gws = saved
+
+        # updated values and gradients
+        datas = []
+        gdatas = []
+        lrs = []
+        glrs = []
+
+        dw, = torch.autograd.grad(tloss, (params[-1], ))
+
+        model.train()
+        # back-gradient optimization
+        for (data, label, lr), w, gw, in reversed(list(zip(steps, params, gws))):
+            # input of autograd
+            hvp_in = [w]
+            hvp_in.append(data)
+            hvp_in.append(lr)
+            dgw = dw.neg()  # negate learning rate
+
+            hvp_grad = torch.autograd.grad(
+                outputs=(gw, ),
+                inputs=hvp_in,
+                grad_outputs=(dgw,)
+            )
+
+            with torch.no_grad():
+                datas.append(data)
+                gdatas.append(hvp_grad[1])
+                lrs.append(lr)
+                glrs.append(hvp_grad[2])
+
+                dw.add_(hvp_grad[0])
+
+        return datas, gdatas, lrs, glrs
 
     def train(self):
-        for epoch, it, (data, label) in self.prefetch_train_loader_iter():
+        def weight_reset(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                m.reset_parameters()
+
+        cfg = self.cfg
+        device = cfg.device
+
+        for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
             if it == 0:
                 self.scheduler.step()
 
             self.optimizer.zero_grad()
-            loss = self.forward(self.model, data, label)
-            self.backward(loss)
+            rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
+
+            task_models = self.models
+
+            steps = self.get_steps()
+
+            for model in task_models:
+                model.apply(weight_reset)
+
+                tloss, saved = self.forward(model, rdata, rlabel, steps)
+                self.backward(model, steps, saved)
+                del tloss, saved
 
             self.optimizer.step()
 
             if it == 0:
                 logging.info('Train Epoch: {}'.format(epoch))
+
+    # get epoch, iteration and data from train_loader
+    def prefetch_train_loader_iter(self):
+        cfg = self.cfg
+        train_iter = iter(cfg.train_loader)
+        for epoch in range(cfg.TASK.epochs):
+            niter = len(train_iter)
+            prefetch_it = max(0, niter - 2)
+            for it, val in enumerate(train_iter):
+                # Prefetch (start workers) at the end of epoch BEFORE yielding
+                if it == prefetch_it and epoch < cfg.TASK.epochs - 1:
+                    train_iter = iter(cfg.train_loader)
+                yield epoch, it, val
