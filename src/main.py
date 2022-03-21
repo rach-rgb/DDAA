@@ -1,8 +1,9 @@
 import torch, logging
 from utils import Config
 from distillation import Trainer
-from networks.networks import LeNet
+from networks.nets import LeNet
 from dataset import CustomMNISTDataset
+from post_process import save_results
 
 
 def main(cfg):
@@ -27,7 +28,11 @@ def main(cfg):
         raise RuntimeError("{} Not Implemented".format(cfg.TASK.model))
 
     # Dataset Distillation
-    Trainer([task_model], cfg).train()
+    steps = Trainer([task_model], cfg).train()
+
+    if cfg.OUTPUT.save is True:
+        logging.info('Save output')
+        save_results(cfg, steps)
 
 
 if __name__ == '__main__':

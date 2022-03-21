@@ -168,3 +168,35 @@ class ReparamModule(nn.Module):
             with self.unflatten_weight(flat_w):
                 init_weights(self, state)
         return flat_w
+
+##############################################################################
+# methods w/o state instance
+##############################################################################
+
+    # reset w/o state instance
+    def reset2(self):
+        flat_w = torch.empty_like(self.flat_w).requires_grad_()
+        with torch.no_grad():
+            with self.unflatten_weight(flat_w):
+                init_weights2(self)
+        return flat_w
+
+
+# init_weights w/o state instance
+def init_weights2(net):
+    def init_func2(m):
+        classname = m.__class__.__name__
+        if classname.startswith('Conv') or classname == 'Linear':
+            if getattr(m, 'bias', None) is not None:
+                init.constant_(m.bias, 0.0)
+            if getattr(m, 'weight', None) is not None:
+                if hasattr(m, 'reset_parameters'):
+                    m.reset_parameters()
+        elif 'Norm' in classname:
+            if getattr(m, 'weight', None) is not None:
+                m.weight.data.fill_(1)
+            if getattr(m, 'bias', None) is not None:
+                m.bias.data.zero_()
+
+    net.apply(init_func2)
+    return net

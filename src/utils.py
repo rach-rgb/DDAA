@@ -5,7 +5,6 @@ class Config(object):
     def __init__(self, dict_config=None):
         super().__init__()
         self.set_attribute(dict_config)
-        self.set_default()
 
     @staticmethod
     def from_yaml(path):

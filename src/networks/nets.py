@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from utils import ReparamModule
+from .reparam_module import ReparamModule
 
 
 class LeNet(ReparamModule):

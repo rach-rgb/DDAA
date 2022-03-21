@@ -1,6 +1,5 @@
 import logging, torch
 import torch.optim as optim
-import torch.nn as nn
 import torch.nn.functional as F
 
 
@@ -44,7 +43,7 @@ class Trainer(object):
         # learning rate
         raw_init_distill_lr = torch.tensor(cfg.DISTILL.lr, device=cfg.device)
         raw_init_distill_lr = raw_init_distill_lr.repeat(self.T, 1)
-        self.raw_distill_lrs = raw_init_distill_lr.expml_().log_().requires_grad_()
+        self.raw_distill_lrs = raw_init_distill_lr.expm1_().log_().requires_grad_()
         self.params.append(self.raw_distill_lrs)
 
         for p in self.params:
@@ -61,10 +60,20 @@ class Trainer(object):
 
         return steps
 
+    # collect gradient for parameters
+    def accumulate_grad(self, grad_infos):
+        bwd_out = []
+        bwd_grad = []
+        for datas, gdatas, lrs, glrs in grad_infos:
+            bwd_out += list(lrs)
+            bwd_grad += list(glrs)
+            for d, g in zip(datas, gdatas):
+                d.grad.add_(g) # add gradient to data
+        if len(bwd_out) > 0:
+            torch.autograd.backward(bwd_out, bwd_grad)
+
     # train task model using distilled data
     def forward(self, model, rdata, rlabel, steps):
-        cfg = self.cfg
-
         # forward distilled dataset
         model.train()
         w = model.get_param()
@@ -129,10 +138,6 @@ class Trainer(object):
         return datas, gdatas, lrs, glrs
 
     def train(self):
-        def weight_reset(m):
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-                m.reset_parameters()
-
         cfg = self.cfg
         device = cfg.device
 
@@ -145,19 +150,36 @@ class Trainer(object):
 
             task_models = self.models
 
+            losses = []
             steps = self.get_steps()
 
+            grad_infos = []
             for model in task_models:
-                model.apply(weight_reset)
+                model.reset2()
 
                 tloss, saved = self.forward(model, rdata, rlabel, steps)
-                self.backward(model, steps, saved)
+                losses.append(tloss.detach())
+                grad_infos.append(self.backward(model, steps, saved))
                 del tloss, saved
+
+            self.accumulate_grad(grad_infos)
+
+            # average gradient
+            grads = [p.grad for p in self.params]
+            for g in grads:
+                g.div_(len(task_models))
 
             self.optimizer.step()
 
-            if it == 0:
-                logging.info('Train Epoch: {}'.format(epoch))
+            if it == 0 and (epoch % 5 == 0):
+                losses = torch.stack(losses, 0).sum()
+                logging.info('Train Epoch: {}, Loss: {}'.format(epoch, losses.item()))
+
+        logging.info('Distillation finished')
+        # return results
+        with torch.no_grad():
+            steps = self.get_steps()
+        return steps
 
     # get epoch, iteration and data from train_loader
     def prefetch_train_loader_iter(self):
