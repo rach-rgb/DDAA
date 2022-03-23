@@ -1,30 +1,20 @@
-from torchvision import datasets
 import torch
-from typing import Callable, Optional
 import random
 import numpy as np
+from torchvision import datasets
 from torchvision import transforms
 
 
 class CustomMNISTDataset(datasets.MNIST):
-    def __init__(
-            self,
-            root: str,
-            train: bool = True,
-            transform: Optional[Callable] = None,
-            target_transform: Optional[Callable] = None,
-            download: bool = False,
-            imbalance_r=1,
-            noise_r=0
-    ):
-        self.imbalance_r = imbalance_r
-        self.noise_r = noise_r
+    def __init__(self, cfg, train, download=False):
+        self.imbalance_r = cfg.DATA_SET.imbalance
+        self.noise_r = cfg.DATA_SET.noise
 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize((cfg.DATA_SET.mean,), (cfg.DATA_SET.std,))
         ])
-        super(CustomMNISTDataset, self).__init__(root, train, transform, target_transform, download)
+        super(CustomMNISTDataset, self).__init__(cfg.DATA_SET.root, train, transform, None, download)
 
     def _load_data(self):
         data, targets = super(CustomMNISTDataset, self)._load_data()

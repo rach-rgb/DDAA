@@ -1,26 +1,37 @@
 import logging, torch
 import torch.optim as optim
 import torch.nn.functional as F
+from networks.nets import LeNet
 
 
 class Trainer(object):
-    def __init__(self, models, cfg):
+    def __init__(self, cfg):
         self.cfg = cfg
-        self.models = models  # TODO
-        self.num_data_steps = cfg.DISTILL.steps     # how much data we have
-        self.T = cfg.DISTILL.steps * cfg.DISTILL.epochs     # total number of steps
+        self.num_data_steps = cfg.DISTILL.d_steps     # how much data we have per epoch
+        self.T = cfg.DISTILL.d_steps * cfg.DISTILL.d_epochs     # total number of steps
         # how much data to distill for each step
         self.num_per_step = cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class
 
+        self.models = []
         self.params = []
         self.labels = []    # labels (no label distillation)
         self.data = []      # distilled data
         self.raw_distill_lrs = []   # learning rate to train task model with distilled data
+        self.init_models()
         self.init_data()
 
-        self.optimizer = optim.Adam(self.params, lr=cfg.TASK.lr, betas=(0.5, 0.999))
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=cfg.TASK.decay_epochs,
-                                                   gamma=cfg.TASK.decay_factor)
+        self.optimizer = optim.Adam(self.params, lr=cfg.DISTILL.lr, betas=(0.5, 0.999))
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=cfg.DISTILL.decay_epochs,
+                                                   gamma=cfg.DISTILL.decay_factor)
+
+    # init models
+    def init_models(self):
+        cfg = self.cfg
+        if cfg.DISTILL.model == 'LeNet':
+            task_model = LeNet(cfg).to(cfg.device)
+        else:
+            raise RuntimeError("{} Not Implemented".format(cfg.DISTILL.model))
+        self.models = [task_model]
 
     # initialize label, distilled data and learning rate
     def init_data(self):
@@ -32,6 +43,7 @@ class Trainer(object):
         distill_label = distill_label.t().reshape(-1)  # [0, 0, ... , 1, 1, ... ]
         for _ in range(self.num_data_steps):
             self.labels.append(distill_label)
+            # don't distill labels
 
         # data
         for _ in range(self.num_data_steps):
@@ -41,7 +53,7 @@ class Trainer(object):
             self.params.append(distill_data)
 
         # learning rate
-        raw_init_distill_lr = torch.tensor(cfg.DISTILL.lr, device=cfg.device)
+        raw_init_distill_lr = torch.tensor(cfg.DISTILL.d_lr, device=cfg.device)
         raw_init_distill_lr = raw_init_distill_lr.repeat(self.T, 1)
         self.raw_distill_lrs = raw_init_distill_lr.expm1_().log_().requires_grad_()
         self.params.append(self.raw_distill_lrs)
@@ -51,7 +63,7 @@ class Trainer(object):
 
     # return label, distilled data and learning rate in a list
     def get_steps(self):
-        total_data = (x for _ in range(self.cfg.DISTILL.epochs) for x in zip(self.data, self.labels))
+        total_data = (x for _ in range(self.cfg.DISTILL.d_epochs) for x in zip(self.data, self.labels))
         lrs = F.softplus(self.raw_distill_lrs).unbind()
 
         steps = []
@@ -68,7 +80,7 @@ class Trainer(object):
             bwd_out += list(lrs)
             bwd_grad += list(glrs)
             for d, g in zip(datas, gdatas):
-                d.grad.add_(g) # add gradient to data
+                d.grad.add_(g)  # add gradient to data
         if len(bwd_out) > 0:
             torch.autograd.backward(bwd_out, bwd_grad)
 
@@ -96,7 +108,7 @@ class Trainer(object):
 
         # calculate loss using train data
         model.eval()
-        output = model.forward_with_param(rdata, w)
+        output = model.forward_with_param(rdata, params[-1])
         tloss = F.cross_entropy(output, rlabel)
         return tloss, (tloss, params, gws)
 
@@ -140,6 +152,7 @@ class Trainer(object):
     def train(self):
         cfg = self.cfg
         device = cfg.device
+        sample_net = cfg.DISTILL.sample_nets
 
         for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
             if it == 0:
@@ -161,19 +174,20 @@ class Trainer(object):
                 losses.append(tloss.detach())
                 grad_infos.append(self.backward(model, steps, saved))
                 del tloss, saved
-
             self.accumulate_grad(grad_infos)
 
             # average gradient
             grads = [p.grad for p in self.params]
             for g in grads:
-                g.div_(len(task_models))
+                g.div_(sample_net)
 
             self.optimizer.step()
 
-            if it == 0 and (epoch % 5 == 0):
+            if it == 0:
                 losses = torch.stack(losses, 0).sum()
                 logging.info('Train Epoch: {}, Loss: {}'.format(epoch, losses.item()))
+
+            del steps, grad_infos, losses
 
         logging.info('Distillation finished')
         # return results
@@ -185,11 +199,11 @@ class Trainer(object):
     def prefetch_train_loader_iter(self):
         cfg = self.cfg
         train_iter = iter(cfg.train_loader)
-        for epoch in range(cfg.TASK.epochs):
+        for epoch in range(cfg.DISTILL.epochs):
             niter = len(train_iter)
             prefetch_it = max(0, niter - 2)
             for it, val in enumerate(train_iter):
                 # Prefetch (start workers) at the end of epoch BEFORE yielding
-                if it == prefetch_it and epoch < cfg.TASK.epochs - 1:
+                if it == prefetch_it and epoch < cfg.DISTILL.epochs - 1:
                     train_iter = iter(cfg.train_loader)
                 yield epoch, it, val

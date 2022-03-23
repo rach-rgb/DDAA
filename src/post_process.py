@@ -1,6 +1,7 @@
 # source: https://github.com/SsnL/dataset-distillation/blob/master/utils/io.py
-import torch, os, logging
+import os, torch, logging
 import numpy as np
+from pathlib import Path
 import matplotlib
 matplotlib.use('agg')  # this needs to be before the next line
 import matplotlib.pyplot as plt
@@ -9,16 +10,18 @@ import matplotlib.pyplot as plt
 def save_results(cfg, steps):
     steps = [(d.detach().cpu(), l.detach().cpu(), lr) for (d, l, lr) in steps]
 
-    result_path = cfg.OUTPUT.dir
-    torch.save(steps, result_path)
-    logging.info('Results saved to {}'.format(result_path))
+    output_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir)
+    output = os.path.join(output_dir, 'result.pth')
 
-    if cfg.OUTPUT.visualize is True:
+    torch.save(steps, output)
+    logging.info('Distilled data saved to {}'.format(output))
+
+    if cfg.OUTPUT.vis_save is True:
         visualize(cfg, steps)
+        logging.info('Visualized data saved to {}'.format(output_dir))
 
 
 def visualize(cfg, steps):
-    logging.info("Visualize Distilled Result")
     if isinstance(steps[0][0], torch.Tensor):   # change to ndarray
         np_steps = []
         for data, label, lr in steps:
@@ -29,11 +32,11 @@ def visualize(cfg, steps):
             np_steps.append((np_data, np_label, lr))
         steps = np_steps
 
-    dataset_vis_info = ('MNIST', 1, 28, 0.1307, 0.3081, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"])
-    vis_args = (steps, cfg.DISTILL.num_per_class, dataset_vis_info, cfg.OUTPUT.vis_dir)
+    dataset_vis_info = (cfg.DATA_SET.name, cfg.DATA_SET.num_channels, cfg.DATA_SET.input_size,
+                        cfg.DATA_SET.mean, cfg.DATA_SET.std, cfg.DATA_SET.labels)
+    vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir)
+    vis_args = (steps, cfg.DISTILL.num_per_class, dataset_vis_info, vis_dir)
     _vis_results_fn(*vis_args)
-
-    logging.info("Visualize Done")
 
 
 def _vis_results_fn(np_steps, img_per_class, dataset_info,
