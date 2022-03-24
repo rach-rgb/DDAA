@@ -1,14 +1,21 @@
-import torch
 import random
+
+import torch
 import numpy as np
-from torchvision import datasets
-from torchvision import transforms
+from torchvision import datasets, transforms
 
 
 class CustomMNISTDataset(datasets.MNIST):
     def __init__(self, cfg, train, download=False):
         self.imbalance_r = cfg.DATA_SET.imbalance
         self.noise_r = cfg.DATA_SET.noise
+
+        # 0 <= class imbalance ratio <= 1
+        if self.imbalance_r < 0 or self.imbalance_r > 1:
+            raise RuntimeError("Invalid class imbalance ratio")
+        # 0 <= label noise ratio <= 1
+        if self.noise_r < 0 or self.noise_r > 1:
+            raise RuntimeError("Invalid label noise ratio")
 
         transform = transforms.Compose([
             transforms.ToTensor(),

@@ -1,10 +1,14 @@
-import logging, torch
+import logging
+
+import torch
 import torch.optim as optim
 import torch.nn.functional as F
+
 from networks.nets import LeNet
 
 
-class Trainer(object):
+# Dataset Distillation Module
+class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
         self.num_data_steps = cfg.DISTILL.d_steps     # how much data we have per epoch
@@ -149,9 +153,11 @@ class Trainer(object):
 
         return datas, gdatas, lrs, glrs
 
-    def train(self):
+    # distill dataset
+    def distill(self):
         cfg = self.cfg
         device = cfg.device
+        log_intv = self.cfg.DISTILL.log_intv
         sample_net = cfg.DISTILL.sample_nets
 
         for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
@@ -183,7 +189,7 @@ class Trainer(object):
 
             self.optimizer.step()
 
-            if it == 0:
+            if (it == 0) and (epoch % log_intv == 0):
                 losses = torch.stack(losses, 0).sum()
                 logging.info('Train Epoch: {}, Loss: {}'.format(epoch, losses.item()))
 
