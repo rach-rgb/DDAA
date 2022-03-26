@@ -2,50 +2,56 @@ import random
 
 import torch
 import numpy as np
-from torchvision import datasets, transforms
+import torch.utils.data as data
 
 
-class CustomMNISTDataset(datasets.MNIST):
-    def __init__(self, cfg, train, download=False):
-        self.imbalance_r = cfg.DATA_SET.imbalance
-        self.noise_r = cfg.DATA_SET.noise
+# create messy dataset
+class MessyDataset(data.Dataset):
+    def __init__(self, cfg, train, train_set):
+        x = train_set.dataset.data
+        y = train_set.dataset.targets
 
-        # 0 <= class imbalance ratio <= 1
-        if self.imbalance_r < 0 or self.imbalance_r > 1:
-            raise RuntimeError("Invalid class imbalance ratio")
-        # 0 <= label noise ratio <= 1
-        if self.noise_r < 0 or self.noise_r > 1:
-            raise RuntimeError("Invalid label noise ratio")
+        if train is True:   # apply mess ratio for train set
+            x, y = self.make_mess(cfg, x, y)
+        num_channels = cfg.DATA_SET.num_channels
+        input_size = cfg.DATA_SET.input_size
 
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((cfg.DATA_SET.mean,), (cfg.DATA_SET.std,))
-        ])
-        super(CustomMNISTDataset, self).__init__(cfg.DATA_SET.root, train, transform, None, download)
+        self.data = x.view(len(x), num_channels, input_size, input_size).float()
+        self.targets = y
 
-    def _load_data(self):
-        data, targets = super(CustomMNISTDataset, self)._load_data()
+    def __getitem__(self, idx):
+        return self.data[idx], self.targets[idx]
 
-        if self.train is True:
-            # apply class imbalance
-            if self.imbalance_r != 1:
-                small_label = random.sample(range(9), 5)
-                small_size = int(len(data) / len(self.classes) * self.imbalance_r)
+    def __len__(self):
+        return len(self.data)
 
-                remove_idx = []
-                nx = targets.numpy()
-                for label in small_label:
-                    remove_idx = remove_idx + list(np.where(nx == label)[0][:small_size])
+    def make_mess(self, cfg, x, y):
+        imbalance_r = cfg.DATA_SET.imbalance
+        noise_r = cfg.DATA_SET.noise
+        num_classes = cfg.DATA_SET.num_classes
+        assert 0 <= imbalance_r <= 1
+        assert 0 <= noise_r <= 1
 
-                mask = np.ones(len(data), dtype=bool)
-                mask[remove_idx] = False
+        # apply class imbalance
+        if imbalance_r != 1:
+            # TODO: random.sample may return duplicate
+            small_label = random.sample(range(num_classes), int(num_classes/2))
+            small_size = int(len(x) / len(num_classes) * imbalance_r)
 
-                data = data[mask]
-                targets = targets[mask]
+            remove_idx = []
+            ny = y.numpy()
+            for label in small_label:
+                remove_idx = remove_idx + list(np.where(ny == label)[0][:small_size])
 
-            # apply label noise
-            if self.noise_r != 0:
-                noise = torch.randint(9, size=(int(len(data) * self.noise_r),))
-                targets = torch.cat([targets[:len(targets) - int(len(targets) * self.noise_r)], noise])
+            mask = np.ones(len(y), dtype=bool)
+            mask[remove_idx] = False
 
-        return data, targets
+            x = x[mask]
+            y = y[mask]
+
+        # apply label noise
+        if noise_r != 0:
+            noise = torch.randint(num_classes-1, size=(int(len(y) * noise_r),))
+            y = torch.cat([y[:len(y) - int(len(y) * noise_r)], noise])
+
+        return x, y
