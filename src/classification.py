@@ -46,10 +46,13 @@ class Classifier:
         scheduler.step()
 
     # evaluate trained model
-    def test(self):
+    def test(self, valid=False):
         model = self.model
         device = self.cfg.device
-        test_loader = self.cfg.test_loader
+        if valid:
+            test_loader = self.cfg.val_loader
+        else:
+            test_loader = self.cfg.test_loader
 
         model.eval()
         avg_loss = 0
@@ -68,44 +71,58 @@ class Classifier:
         return avg_loss, accuracy
 
     # train and evaluate model
-    def train_and_evaluate(self):
+    def train_and_evaluate(self, valid=False):
         do_evaluate = self.cfg.TASK.test
         test_intv = 0
         final_loss = 0
         final_accuracy = 0
+        loss = 0
+        accu = 0
         train_time = 0  # train time per epoch
 
-        logging.info('Start training')
+        if not valid:
+            logging.info('Start training')
 
         if do_evaluate:
             test_intv = self.cfg.TRAIN.test_intv
-            logging.info("Evaluate model every {} epoch".format(test_intv))
+            if not valid:
+                logging.info("Evaluate model every {} epoch".format(test_intv))
 
         for epoch in range(1, self.epochs + 1):
             t0 = time.time()
             self.train()
             train_time += (time.time()-t0)
             if do_evaluate and (epoch % test_intv == 0):
-                loss, accu = self.test()
-                logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
+                loss, accu = self.test(valid)
+                if not valid:
+                    logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
 
             if (epoch == self.epochs) and do_evaluate:
                 final_loss = loss
                 final_accuracy = accu
 
         if do_evaluate:
-            logging.info('Final Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
-        logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time/self.epochs))
+            if valid:
+                logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
+            else:
+                logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
+        if not valid:
+            logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time/self.epochs))
 
 
 # classifier using steps instead of train loader
 class StepClassifier(Classifier):
-    def __init__(self, cfg, steps):
+    def __init__(self, cfg):
         super().__init__(cfg)
-        self.steps = steps
+        self.steps = None
+
+    def set_step(self, step):
+        self.steps = step
 
     def train(self):
         steps = self.steps
+        assert steps is not None
+
         model = self.model
         optimizer = self.optimizer
         scheduler = self.scheduler

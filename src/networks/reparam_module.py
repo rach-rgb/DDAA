@@ -174,24 +174,30 @@ class ReparamModule(nn.Module):
 ##############################################################################
 
     # reset w/o state instance
-    def reset2(self):
-        flat_w = torch.empty_like(self.flat_w).requires_grad_()
+    def reset2(self, init_type, init_param, inplace=True):
+        if inplace:
+            flat_w = self.flat_w
+        else:
+            flat_w = torch.empty_like(self.flat_w).requires_grad_()
         with torch.no_grad():
             with self.unflatten_weight(flat_w):
-                init_weights2(self)
+                init_weights2(self, init_type, init_param)
         return flat_w
 
 
 # init_weights w/o state instance
-def init_weights2(net):
+def init_weights2(net, init_type, init_param):
     def init_func2(m):
         classname = m.__class__.__name__
         if classname.startswith('Conv') or classname == 'Linear':
             if getattr(m, 'bias', None) is not None:
                 init.constant_(m.bias, 0.0)
             if getattr(m, 'weight', None) is not None:
-                if hasattr(m, 'reset_parameters'):
-                    m.reset_parameters()
+                if init_type == 'xavier':
+                    init.xavier_normal_(m.weight, gain=init_param)
+                else:
+                    if hasattr(m, 'reset_parameters'):
+                        m.reset_parameters()
         elif 'Norm' in classname:
             if getattr(m, 'weight', None) is not None:
                 m.weight.data.fill_(1)

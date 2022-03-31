@@ -64,7 +64,9 @@ def main(cfg):
     if cfg.TASK.train is True:
         if cfg.TASK.distill is True:
             logging.info('Use distilled dataset with size: %d for training', len(steps))
-            StepClassifier(cfg, steps).train_and_evaluate()
+            cls = StepClassifier(cfg)
+            cls.set_step(steps)
+            cls.train_and_evaluate()
         else:
             Classifier(cfg).train_and_evaluate()
 

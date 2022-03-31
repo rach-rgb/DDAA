@@ -1,3 +1,4 @@
+import time
 import logging
 
 import torch
@@ -5,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from networks.nets import LeNet
-
+from classification import StepClassifier
 
 # Dataset Distillation Module
 class Distiller:
@@ -32,10 +33,11 @@ class Distiller:
     def init_models(self):
         cfg = self.cfg
         if cfg.DISTILL.model == 'LeNet':
-            task_model = LeNet(cfg).to(cfg.device)
+            for m in range(0, cfg.DISTILL.sample_nets):
+                task_model = LeNet(cfg).to(cfg.device)
+                self.models.append(task_model)
         else:
             raise RuntimeError("{} Not Implemented".format(cfg.DISTILL.model))
-        self.models = [task_model]
 
     # initialize label, distilled data and learning rate
     def init_data(self):
@@ -157,27 +159,36 @@ class Distiller:
     def distill(self):
         cfg = self.cfg
         device = cfg.device
-        log_intv = self.cfg.DISTILL.log_intv
+        log_intv = cfg.DISTILL.log_intv
         sample_net = cfg.DISTILL.sample_nets
+        val_model = StepClassifier(cfg)
+        val_intv = cfg.DISTILL.val_intv
+
+        data_t0 = time.time()
 
         for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
-            if it == 0:
+            data_t = time.time() - data_t0
+
+            if (epoch % val_intv) == 0:
                 self.scheduler.step()
+                val_model.set_step((self.get_steps()))
+                val_model.train_and_evaluate(valid=True)
 
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
             task_models = self.models
 
-            losses = []
+            t0 = time.time()
+            tlosses = []
             steps = self.get_steps()
 
             grad_infos = []
             for model in task_models:
-                model.reset2()
+                model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
 
                 tloss, saved = self.forward(model, rdata, rlabel, steps)
-                losses.append(tloss.detach())
+                tlosses.append(tloss.detach())
                 grad_infos.append(self.backward(model, steps, saved))
                 del tloss, saved
             self.accumulate_grad(grad_infos)
@@ -188,12 +199,16 @@ class Distiller:
                 g.div_(sample_net)
 
             self.optimizer.step()
+            t = time.time() - t0
 
-            if (it == 0) and (epoch % log_intv == 0):
-                losses = torch.stack(losses, 0).sum()
-                logging.info('Train Epoch: {}, Loss: {}'.format(epoch, losses.item()))
+            if it == 0:
+                tlosses = torch.stack(tlosses, 0).sum()
+                logging.info('Epoch: {:4d}, Train Loss: {:.4f}, Data time: {:.2f}, Train time: {:.2f}'
+                             .format(epoch, tlosses.item() / sample_net, data_t, t))
 
-            del steps, grad_infos, losses
+            del steps, grad_infos
+
+            data_t0 = time.time()
 
         logging.info('Distillation finished')
         # return results
@@ -213,3 +228,5 @@ class Distiller:
                 if it == prefetch_it and epoch < cfg.DISTILL.epochs - 1:
                     train_iter = iter(cfg.train_loader)
                 yield epoch, it, val
+
+

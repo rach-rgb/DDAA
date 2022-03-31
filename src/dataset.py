@@ -34,8 +34,7 @@ class MessyDataset(data.Dataset):
 
         # apply class imbalance
         if imbalance_r != 1:
-            # TODO: random.sample may return duplicate
-            small_label = random.sample(range(num_classes), int(num_classes/2))
+            small_label = [x for x in range(0, int(num_classes/2))]
             small_size = int(len(x) / len(num_classes) * imbalance_r)
 
             remove_idx = []
