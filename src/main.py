@@ -18,33 +18,44 @@ def main(cfg):
     cfg.device = device
 
     # get train dataset
-    transform = transforms.Compose([
+    transform_train = transforms.Compose([
+        transforms.Normalize((cfg.DATA_SET.mean,), (cfg.DATA_SET.std,))
+    ])
+    transform_test = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((cfg.DATA_SET.mean,), (cfg.DATA_SET.std,))
     ])
-    train_set = datasets.MNIST(cfg.DATA_SET.root, train=True, transform=transform, download=True)
 
-    val_loader = None
-    val_size = 0
-    if cfg.TASK.validation is True:     # construct validation set
-        val_size = cfg.DATA_SET.val_size
-        train_set, val_set = torch.utils.data.random_split(train_set, [len(train_set.data)-val_size, val_size])
-        val_loader = data.DataLoader(MessyDataset(cfg, False, val_set), cfg.DATA_SET.batch_size*2)
+    # train_set = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
+    # val_loader = None
+    # val_size = 0
+    # if cfg.TASK.validation is True:     # construct validation set
+    #     val_size = cfg.DATA_SET.val_size
+    #     train_set, val_set = torch.utils.data.random_split(train_set, [len(train_set.data)-val_size, val_size])
+    #     val_loader = data.DataLoader(MessyDataset(cfg, False, val_set, transform_train), cfg.DATA_SET.batch_size*2)
+    #
+    # train_dataset = MessyDataset(cfg, True, train_set, transform_train)
+    # train_loader = data.DataLoader(train_dataset, cfg.DATA_SET.batch_size, num_workers=cfg.DATA_SET.num_workers,
+    #                                pin_memory=True, shuffle=True)
+    #
+    # cfg.train_loader = train_loader
+    # logging.info('Load train dataset: %s, size: %d, class imbalance: %.1f, label noise: %.1f',
+    #              cfg.DATA_SET.name, len(train_set.dataset)-val_size, cfg.DATA_SET.imbalance, cfg.DATA_SET.noise)
+    # if cfg.TASK.validation is True:
+    #     cfg.val_loader = val_loader
+    #     logging.info('Load validation dataset: %s, size: %d',
+    #                  cfg.DATA_SET.name, val_size)
 
-    train_dataset = MessyDataset(cfg, True, train_set)
-    train_loader = data.DataLoader(train_dataset, cfg.DATA_SET.batch_size)
-
+    # get train dataset
+    train_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, transform=transform_test, download=True)
+    train_loader = data.DataLoader(train_dataset, cfg.DATA_SET.batch_size, num_workers=cfg.DATA_SET.num_workers,
+                                   pin_memory=True, shuffle=True)
     cfg.train_loader = train_loader
-    logging.info('Load train dataset: %s, size: %d, class imbalance: %.1f, label noise: %.1f',
-                 cfg.DATA_SET.name, len(train_set.dataset)-val_size, cfg.DATA_SET.imbalance, cfg.DATA_SET.noise)
-    if cfg.TASK.validation is True:
-        cfg.val_loader = val_loader
-        logging.info('Load validation dataset: %s, size: %d',
-                     cfg.DATA_SET.name, val_size)
 
     # get test dataset
-    test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=transform, download=True)
-    test_loader = data.DataLoader(test_dataset, cfg.DATA_SET.batch_size)
+    test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=transform_test, download=True)
+    test_loader = data.DataLoader(test_dataset, cfg.DATA_SET.batch_size, num_workers=cfg.DATA_SET.num_workers,
+                                  pin_memory=True, shuffle=True)
     cfg.test_loader = test_loader
     logging.info('Load test dataset: %s, size: %d', cfg.DATA_SET.name, len(test_dataset.data))
 

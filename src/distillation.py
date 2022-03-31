@@ -9,19 +9,23 @@ from networks.nets import LeNet
 from classification import StepClassifier
 
 # Dataset Distillation Module
+from src.utils import visualize
+
+
 class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.num_data_steps = cfg.DISTILL.d_steps     # how much data we have per epoch
-        self.T = cfg.DISTILL.d_steps * cfg.DISTILL.d_epochs     # total number of steps
+        self.num_data_steps = cfg.DISTILL.d_steps  # how much data we have per epoch
+        self.T = cfg.DISTILL.d_steps * cfg.DISTILL.d_epochs  # total number of steps
         # how much data to distill for each step
         self.num_per_step = cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class
 
         self.models = []
         self.params = []
-        self.labels = []    # labels (no label distillation)
-        self.data = []      # distilled data
-        self.raw_distill_lrs = []   # learning rate to train task model with distilled data
+        self.labels = []  # labels (no label distillation)
+        self.data = []  # distilled data
+        self.raw_distill_lrs = []  # learning rate to train task model with distilled data
+
         self.init_models()
         self.init_data()
 
@@ -44,8 +48,8 @@ class Distiller:
         cfg = self.cfg
 
         # labels
-        distill_label = torch.arange(cfg.DATA_SET.num_classes, dtype=torch.long, device=cfg.device)\
-                             .repeat(cfg.DISTILL.num_per_class, 1)
+        distill_label = torch.arange(cfg.DATA_SET.num_classes, dtype=torch.long, device=cfg.device) \
+            .repeat(cfg.DISTILL.num_per_class, 1)
         distill_label = distill_label.t().reshape(-1)  # [0, 0, ... , 1, 1, ... ]
         for _ in range(self.num_data_steps):
             self.labels.append(distill_label)
@@ -102,11 +106,9 @@ class Distiller:
             with torch.enable_grad():
                 output = model.forward_with_param(data, w)
                 loss = F.cross_entropy(output, label)
-                # calculate gradient of loss w.r.t w
             gw, = torch.autograd.grad(loss, w, lr.squeeze(), create_graph=True)
 
             with torch.no_grad():
-                # update weight
                 new_w = w.sub(gw).requires_grad_()
                 params.append(new_w)
                 gws.append(gw)
@@ -128,7 +130,7 @@ class Distiller:
         lrs = []
         glrs = []
 
-        dw, = torch.autograd.grad(tloss, (params[-1], ))
+        dw, = torch.autograd.grad(tloss, (params[-1],))
 
         model.train()
         # back-gradient optimization
@@ -138,9 +140,8 @@ class Distiller:
             hvp_in.append(data)
             hvp_in.append(lr)
             dgw = dw.neg()  # negate learning rate
-
             hvp_grad = torch.autograd.grad(
-                outputs=(gw, ),
+                outputs=(gw,),
                 inputs=hvp_in,
                 grad_outputs=(dgw,)
             )
@@ -159,20 +160,26 @@ class Distiller:
     def distill(self):
         cfg = self.cfg
         device = cfg.device
+        num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
-        sample_net = cfg.DISTILL.sample_nets
         val_model = StepClassifier(cfg)
         val_intv = cfg.DISTILL.val_intv
 
         data_t0 = time.time()
 
         for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
-            data_t = time.time() - data_t0
+            data_t = time.time() - data_t0  # data load time
 
-            if (epoch % val_intv) == 0:
+            if it == 0 and not epoch == 0:
                 self.scheduler.step()
-                val_model.set_step((self.get_steps()))
-                val_model.train_and_evaluate(valid=True)
+
+            if it == 0 and epoch % val_intv == 0:
+                # logging.info('Begin of epoch {} validation result'.format(epoch))
+                with torch.no_grad():
+                    steps = self.get_steps()
+                # val_model.set_step(steps)
+                # val_model.train_and_evaluate(valid=True)
+                visualize(cfg, steps, epoch)
 
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
@@ -180,33 +187,35 @@ class Distiller:
             task_models = self.models
 
             t0 = time.time()
-            tlosses = []
+            ls_train = []
             steps = self.get_steps()
-
             grad_infos = []
             for model in task_models:
                 model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
 
-                tloss, saved = self.forward(model, rdata, rlabel, steps)
-                tlosses.append(tloss.detach())
+                l_train, saved = self.forward(model, rdata, rlabel, steps)
+                ls_train.append(l_train.detach())
                 grad_infos.append(self.backward(model, steps, saved))
-                del tloss, saved
+                del l_train, saved
             self.accumulate_grad(grad_infos)
 
             # average gradient
             grads = [p.grad for p in self.params]
             for g in grads:
-                g.div_(sample_net)
+                g.div_(num_subnets)
 
             self.optimizer.step()
-            t = time.time() - t0
+            t = time.time() - t0  # train time
 
-            if it == 0:
-                tlosses = torch.stack(tlosses, 0).sum()
-                logging.info('Epoch: {:4d}, Train Loss: {:.4f}, Data time: {:.2f}, Train time: {:.2f}'
-                             .format(epoch, tlosses.item() / sample_net, data_t, t))
+            if it == 0 and epoch % log_intv == 0:
+                ls_train = torch.stack(ls_train, 0).sum().item() / num_subnets
+                logging.info('Epoch: {:4d}, Train Loss: {:.4f}, '
+                             'Data time: {:.2f}, Train time: {:.2f}'
+                             .format(epoch, ls_train, data_t, t))
+                if ls_train != ls_train:
+                    raise RuntimeError('loss became NaN')
 
-            del steps, grad_infos
+            del steps, grad_infos, ls_train, grads
 
             data_t0 = time.time()
 
@@ -228,5 +237,3 @@ class Distiller:
                 if it == prefetch_it and epoch < cfg.DISTILL.epochs - 1:
                     train_iter = iter(cfg.train_loader)
                 yield epoch, it, val
-
-

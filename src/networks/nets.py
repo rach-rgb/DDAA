@@ -9,17 +9,14 @@ class LeNet(ReparamModule):
             raise RuntimeError("Cannot use dataset {} for LeNet".format(cfg.DATA_SET.name))
         num_classes = cfg.DATA_SET.num_classes
         num_channels = cfg.DATA_SET.num_channels
-        if cfg.DATA_SET.input_size == 28:
-            pad_size = 2
-        else:
-            pad_size = 0
+        input_size = cfg.DATA_SET.input_size
 
         super(LeNet, self).__init__()
-        self.conv1 = nn.Conv2d(num_channels, 6, 5, padding=pad_size)
+        self.conv1 = nn.Conv2d(num_channels, 6, 5, padding=2 if input_size == 28 else 0)
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_classes)
+        self.fc3 = nn.Linear(84, 1 if num_classes <= 2 else num_classes)
 
     def forward(self, x):
         out = F.relu(self.conv1(x), inplace=True)
@@ -31,3 +28,6 @@ class LeNet(ReparamModule):
         out = F.relu(self.fc2(out), inplace=True)
         out = self.fc3(out)
         return out
+
+
+

@@ -105,7 +105,7 @@ class Classifier:
             if valid:
                 logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
             else:
-                logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
+                logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
         if not valid:
             logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time/self.epochs))
 

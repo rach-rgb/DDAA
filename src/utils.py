@@ -49,7 +49,7 @@ def save_results(cfg, steps):
 
 
 # visualize steps
-def visualize(cfg, steps):
+def visualize(cfg, steps, epoch=None):
     if isinstance(steps[0][0], torch.Tensor):   # change to ndarray
         np_steps = []
         for data, label, lr in steps:
@@ -62,7 +62,11 @@ def visualize(cfg, steps):
 
     dataset_vis_info = (cfg.DATA_SET.name, cfg.DATA_SET.num_channels, cfg.DATA_SET.input_size,
                         cfg.DATA_SET.mean, cfg.DATA_SET.std, cfg.DATA_SET.labels)
-    vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir)
+    if epoch is None:
+        vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir)
+    else:
+        vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir, 'epoch'+str(epoch))
+        os.mkdir(vis_dir)
     vis_args = (steps, cfg.DISTILL.num_per_class, dataset_vis_info, vis_dir)
     _vis_results_fn(*vis_args)
 
