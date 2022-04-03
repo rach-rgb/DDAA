@@ -6,6 +6,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from networks.nets import LeNet
+from augmentation import AutoAug
+from augparams import ProjectModel
 from classification import StepClassifier
 
 # Dataset Distillation Module
@@ -15,6 +17,9 @@ from src.utils import visualize
 class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
+        self.do_val = cfg.TASK.VALIDATION  # introduce validation
+        self.do_aug = cfg.TASK.AUGMENTATION  # apply augmentation
+
         self.num_data_steps = cfg.DISTILL.d_steps  # how much data we have per epoch
         self.T = cfg.DISTILL.d_steps * cfg.DISTILL.d_epochs  # total number of steps
         # how much data to distill for each step
@@ -162,8 +167,25 @@ class Distiller:
         device = cfg.device
         num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
-        val_model = StepClassifier(cfg)
-        val_intv = cfg.DISTILL.val_intv
+        vis_intv = cfg.DISTILL.vis_intv
+        val_intv = 0
+        val_model = None
+        aug_model = None
+
+        # initialize validation related models
+        if self.do_val:
+            val_model = StepClassifier(cfg)
+            val_intv = cfg.DISTILL.val_intv
+
+        # initialize augmentation related models
+        if self.do_aug:
+            if self.cfg.AUGMENT.do_auto:    # use auto-augmentation
+                # TODO: initialize projection model
+                p_model = ProjectModel(1, 1, 1, 1).cuda(device)
+                aug_model = AutoAug(cfg, p_model)
+                # TODO: set optimizer for projection model
+            else:
+                aug_model = AutoAug(cfg)
 
         data_t0 = time.time()
 
@@ -173,18 +195,20 @@ class Distiller:
             if it == 0 and not epoch == 0:
                 self.scheduler.step()
 
-            if it == 0 and epoch % val_intv == 0:
-                # logging.info('Begin of epoch {} validation result'.format(epoch))
+            if self.do_val and it == 0 and epoch % val_intv == 0:   # validation
+                logging.info('Begin of epoch {} validation result'.format(epoch))
                 with torch.no_grad():
                     steps = self.get_steps()
-                # val_model.set_step(steps)
-                # val_model.train_and_evaluate(valid=True)
+                val_model.set_step(steps)
+                val_model.train_and_evaluate(valid=True)
+
+            if it == 0 and epoch % vis_intv == 0:   # save visualized intermediate result
                 visualize(cfg, steps, epoch)
 
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
-            task_models = self.models
+            task_models = self.models   # subnetworks
 
             t0 = time.time()
             ls_train = []
@@ -192,6 +216,10 @@ class Distiller:
             grad_infos = []
             for model in task_models:
                 model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
+
+                # apply augmentation
+                if self.do_aug:
+                    rdata = aug_model.augment(rdata)
 
                 l_train, saved = self.forward(model, rdata, rlabel, steps)
                 ls_train.append(l_train.detach())

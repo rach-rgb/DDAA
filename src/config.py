@@ -1,5 +1,5 @@
 import yaml
-
+import operations as op
 
 class Config(object):
     def __init__(self, dict_config=None):
@@ -27,12 +27,35 @@ class Config(object):
             raise RuntimeError("Dataset {} not implemented".format(cfg.name))
         cfg.set_attribute(dataset_info)
 
+    # set augmentation information
+    @staticmethod
+    def init_augment(cfg):
+        if cfg.name == 'MNIST':
+            aug_info = {
+                'aug_list': [
+                    'ShearX',
+                    'ShearY',
+                    'TranslateX',
+                    'TranslateY',
+                    'Rotate',
+                    'Sharpness',
+                    'Cutout',
+                    'Flip',
+                    'Identity'
+                ]
+            }
+        else:
+            raise RuntimeError("Dataset {} not implemented".format(cfg.name))
+        cfg.set_attribute(aug_info)
+
     def set_attribute(self, dict_config):
         for key in dict_config.keys():
             if isinstance(dict_config[key], dict):
                 c = Config(dict_config[key])
                 if key == 'DATA_SET':
                     Config.init_dataset(c)
+                if key == 'AUGMENT':
+                    Config.init_augment(c)
                 self.__dict__[key] = c
             else:
                 self.__dict__[key] = dict_config[key]
