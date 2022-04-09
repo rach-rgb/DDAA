@@ -28,7 +28,7 @@ def main(cfg):
 
     # get train and validation dataset
     val_size = 0
-    if cfg.TAST.validation is True:
+    if cfg.TASK.validation is True:
         train_dataset_all = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
         val_size = cfg.DATA_SET.val_size
         # TODO: build validation set 'wisely'

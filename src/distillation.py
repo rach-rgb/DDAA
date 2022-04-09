@@ -17,8 +17,8 @@ from src.utils import visualize
 class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.do_val = cfg.TASK.VALIDATION  # introduce validation
-        self.do_aug = cfg.TASK.AUGMENTATION  # apply augmentation
+        self.do_val = cfg.TASK.validation  # introduce validation
+        self.do_aug = cfg.TASK.augment  # apply augmentation
 
         self.num_data_steps = cfg.DISTILL.d_steps  # how much data we have per epoch
         self.T = cfg.DISTILL.d_steps * cfg.DISTILL.d_epochs  # total number of steps
@@ -203,6 +203,8 @@ class Distiller:
                 val_model.train_and_evaluate(valid=True)
 
             if it == 0 and epoch % vis_intv == 0:   # save visualized intermediate result
+                with torch.no_grad():
+                    steps = self.get_steps()
                 visualize(cfg, steps, epoch)
 
             self.optimizer.zero_grad()
