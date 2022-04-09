@@ -117,7 +117,6 @@ def Cutout(img, v):  # [0, 60] => percentage: [0, 0.2]
     return CutoutAbs(img, v)
 
 
-
 def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
     # assert 0 <= v <= 20
     if v < 0:
@@ -132,10 +131,10 @@ def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
     y1 = min(h, y0 + v)
 
     xy = (x0, y0, x1, y1)
-    color = (125, 123, 114)
-    # color = (0, 0, 0)
+    # color = (125, 123, 114)
+    # # color = (0, 0, 0)
     img = img.copy()
-    PIL.ImageDraw.Draw(img).rectangle(xy, color)
+    PIL.ImageDraw.Draw(img).rectangle(xy, 0)
     return img
 
 

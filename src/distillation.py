@@ -181,7 +181,7 @@ class Distiller:
         if self.do_aug:
             if self.cfg.AUGMENT.do_auto:    # use auto-augmentation
                 # TODO: initialize projection model
-                p_model = ProjectModel(1, 1, 1, 1).cuda(device)
+                p_model = ProjectModel(1, 1, 1, 1).to(cfg.device)
                 aug_model = AutoAug(cfg, p_model)
                 # TODO: set optimizer for projection model
             else:
@@ -250,6 +250,9 @@ class Distiller:
             data_t0 = time.time()
 
         logging.info('Distillation finished')
+        if self.cfg.AUGMENT.log:
+            aug_model.log_history()
+
         # return results
         with torch.no_grad():
             steps = self.get_steps()
