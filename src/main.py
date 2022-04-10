@@ -3,6 +3,8 @@ import logging
 import torch
 import torch.utils.data as data
 from torchvision import datasets, transforms
+from sklearn.model_selection import train_test_split
+
 
 from config import Config
 from dataset import MessyDataset
@@ -17,37 +19,33 @@ def main(cfg):
     device = torch.device("cuda" if use_cuda else "cpu")
     cfg.device = device
 
-    # get train dataset
-    transform_tensor = transforms.Compose([
-        transforms.Normalize((cfg.DATA_SET.mean,), (cfg.DATA_SET.std,))
-    ])
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((cfg.DATA_SET.mean,), (cfg.DATA_SET.std,))
     ])
-
     # get train and validation dataset
-    val_size = 0
     if cfg.TASK.validation is True:
-        train_dataset_all = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
-        val_size = cfg.DATA_SET.val_size
-        # TODO: build validation set 'wisely'
-        train_subset, val_subset = torch.utils.data.random_split(train_dataset_all,
-                                                                 [len(train_dataset_all.data) - val_size, val_size])
-        train_dataset = MessyDataset(cfg, True, train_subset, transform_tensor)
-        val_loader = data.DataLoader(MessyDataset(cfg, False, val_subset, transform_tensor), cfg.DATA_SET.batch_size*2)
+        clean_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
+        train_idx, val_idx, _, _ = train_test_split(range(len(clean_dataset)), clean_dataset.targets,
+                                                    stratify=clean_dataset.targets, test_size=cfg.DATA_SET.val_size)
+        train_dataset = MessyDataset(cfg, True, clean_dataset, index=train_idx, transform=transform)
+        # validation set
+        val_dataset = MessyDataset(cfg, False, clean_dataset, index=val_idx, transform=transform)
+        val_loader = data.DataLoader(val_dataset, cfg.DATA_SET.batch_size,
+                                     num_workers=cfg.DATA_SET.num_workers, pin_memory=True, shuffle=True)
         cfg.val_loader = val_loader
     else:
-        train_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, transform=transform, download=True)
+        clean_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
+        train_dataset = MessyDataset(cfg, True, clean_dataset, transform=transform)
 
     train_loader = data.DataLoader(train_dataset, cfg.DATA_SET.batch_size,
                                    num_workers=cfg.DATA_SET.num_workers, pin_memory=True, shuffle=True)
     cfg.train_loader = train_loader
 
-    logging.info('Load train dataset: %s, size: %d, class imbalance: %.1f, label noise: %.1f',
-                 cfg.DATA_SET.name, len(cfg.train_loader.dataset)-val_size, cfg.DATA_SET.imbalance, cfg.DATA_SET.noise)
+    logging.info('Load train dataset: %s, size: %d, class imbalance: %.2f, label noise: %.1f',
+                 cfg.DATA_SET.name, len(cfg.train_loader.dataset), cfg.DATA_SET.imbalance, cfg.DATA_SET.noise)
     if cfg.TASK.validation is True:
-        logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, val_size)
+        logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, len(cfg.val_loader.dataset))
 
     # get test dataset
     test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=transform, download=True)
@@ -74,16 +72,16 @@ def main(cfg):
             logging.info('Use distilled dataset with size: %d for training', len(steps))
             cls = StepClassifier(cfg)
             cls.set_step(steps)
-            cls.train_and_evaluate()
+            cls.train_and_evaluate(valid=cfg.TASK.validation)
         else:
-            Classifier(cfg).train_and_evaluate()
+            Classifier(cfg).train_and_evaluate(valid=cfg.TASK.validation)
 
 
 if __name__ == '__main__':
     logging.basicConfig(filename='../output/logging.log', level=logging.INFO)
     logging.getLogger().addHandler(logging.StreamHandler())
     try:
-        main(Config.from_yaml('../configs/randaug.yaml'))
+        main(Config.from_yaml('../configs/dd_light.yaml'))
     except Exception:
         logging.exception("Fatal error:")
         raise
