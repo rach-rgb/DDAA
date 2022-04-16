@@ -11,7 +11,7 @@ from augparams import ProjectModel
 from classification import StepClassifier
 
 # Dataset Distillation Module
-from src.utils import visualize
+from utils import visualize
 
 
 class Distiller:
@@ -210,6 +210,11 @@ class Distiller:
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
+            # apply augmentation
+            if self.do_aug:
+                rdata = torch.cat([rdata, aug_model.augment(rdata)], dim=0)
+                rlabel = torch.cat([rlabel, rlabel], dim=0)
+
             task_models = self.models   # subnetworks
 
             t0 = time.time()
@@ -218,10 +223,6 @@ class Distiller:
             grad_infos = []
             for model in task_models:
                 model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
-
-                # apply augmentation
-                if self.do_aug:
-                    rdata = aug_model.augment(rdata)
 
                 l_train, saved = self.forward(model, rdata, rlabel, steps)
                 ls_train.append(l_train.detach())
@@ -250,7 +251,7 @@ class Distiller:
             data_t0 = time.time()
 
         logging.info('Distillation finished')
-        if self.cfg.AUGMENT.log:
+        if self.cfg.TASK.augment and self.cfg.AUGMENT.log:
             aug_model.log_history()
 
         # return results

@@ -81,7 +81,7 @@ if __name__ == '__main__':
     logging.basicConfig(filename='../output/logging.log', level=logging.INFO)
     logging.getLogger().addHandler(logging.StreamHandler())
     try:
-        main(Config.from_yaml('../configs/no_dd.yaml'))
+        main(Config.from_yaml('../configs/dd.yaml'))
     except Exception:
         logging.exception("Fatal error:")
         raise
