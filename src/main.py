@@ -72,16 +72,16 @@ def main(cfg):
             logging.info('Use distilled dataset with size: %d for training', len(steps))
             cls = StepClassifier(cfg)
             cls.set_step(steps)
-            cls.train_and_evaluate(valid=cfg.TASK.validation)
+            cls.train_and_evaluate()
         else:
-            Classifier(cfg).train_and_evaluate(valid=cfg.TASK.validation)
+            Classifier(cfg).train_and_evaluate()
 
 
 if __name__ == '__main__':
     logging.basicConfig(filename='../output/logging.log', level=logging.INFO)
     logging.getLogger().addHandler(logging.StreamHandler())
     try:
-        main(Config.from_yaml('../configs/dd_light.yaml'))
+        main(Config.from_yaml('../configs/no_dd.yaml'))
     except Exception:
         logging.exception("Fatal error:")
         raise
