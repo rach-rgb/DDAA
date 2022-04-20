@@ -1,4 +1,4 @@
-# source: AdaAug
+# source: https://github.com/jamestszhim/adaptive_augment
 import torch.nn as nn
 
 

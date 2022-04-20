@@ -1,4 +1,4 @@
-# source: AdaAug
+# source: https://github.com/jamestszhim/adaptive_augment
 
 import random
 import numpy as np
@@ -131,9 +131,10 @@ def CutoutAbs(img, v):  # [0, 60] => percentage: [0, 0.2]
     y1 = min(h, y0 + v)
 
     xy = (x0, y0, x1, y1)
-    # color = (125, 123, 114)
-    # # color = (0, 0, 0)
+    # grayscale image
     img = img.copy()
+    # TODO: support color image
+    # PIL.ImageDraw.Draw(img).rectangle(xy,(0,0,0))
     PIL.ImageDraw.Draw(img).rectangle(xy, 0)
     return img
 

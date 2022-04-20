@@ -16,10 +16,7 @@ class MessyDataset(data.Dataset):
             x, y = self.get_subset(x, y, index)
         if train is True:  # apply mess ratio for train set
             x, y = self.make_mess(cfg, x, y)
-        num_channels = cfg.DATA_SET.num_channels
-        input_size = cfg.DATA_SET.input_size
 
-        # self.data = x.view(len(x), num_channels, input_size, input_size).float()
         self.data = x
         self.targets = y
 
