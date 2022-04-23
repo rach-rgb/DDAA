@@ -80,13 +80,11 @@ class Classifier:
         accu = 0
         train_time = 0  # train time per epoch
 
-        if not valid:
-            logging.info('Start training')
+        logging.info('Start training')
 
         if do_evaluate:
             test_intv = self.cfg.TRAIN.test_intv
-            if not valid:
-                logging.info("Evaluate model every {} epoch".format(test_intv))
+            logging.info("Evaluate model every {} epoch".format(test_intv))
 
         for epoch in range(1, self.epochs + 1):
             t0 = time.time()
@@ -94,8 +92,7 @@ class Classifier:
             train_time += (time.time()-t0)
             if do_evaluate and (epoch % test_intv == 0):
                 loss, accu = self.test(valid)
-                if not valid:
-                    logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
+                logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
 
             if (epoch == self.epochs) and do_evaluate:
                 final_loss = loss
@@ -106,8 +103,7 @@ class Classifier:
                 logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
             else:
                 logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
-        if not valid:
-            logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time/self.epochs))
+        logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time/self.epochs))
 
 
 # classifier using steps instead of train loader

@@ -8,31 +8,28 @@ from torchvision import transforms
 from operations import apply_augment
 
 
-class AutoAug(nn.Module):
-    def __init__(self, cfg, p_model=None):
+class AugModule(nn.Module):
+    def __init__(self, device, aug_cfg, p_layer=None):
         super().__init__()
-        self.cfg = cfg
-        self.device = cfg.device
-        self.do_auto = cfg.AUGMENT.do_auto    # perform auto-augmentation
-        self.do_manual = cfg.AUGMENT.do_manual
-        self.aug_list = cfg.AUGMENT.aug_list
-        if self.do_manual:
-            self.aug_list = cfg.AUGMENT.man_aug_list
-        self.num_aug = len(self.aug_list)
-        self.p_model = p_model
+        self.cfg = aug_cfg
+        self.device = device
+        self.aug_type = aug_cfg.aug_type
+        self.aug_list = aug_cfg.aug_list
+        self.num_op = len(self.aug_list)
+        self.num_data = aug_cfg.aug_num
+        self.p_layer = p_layer
 
-        # log augmentation strategy
-        self.log = cfg.AUGMENT.log
-        self.hist = []
+        # log selected operation
+        self.log = aug_cfg.log
         self.count = {}
-        for i in range(0, self.num_aug):
+        for i in range(0, self.num_op):
             self.count[i] = 0
 
     def augment(self, images):
-        if self.do_auto:
-            return self.auto_aug(images)
-        else:
+        if self.aug_type == 'Random':
             return self.rand_aug(images)
+        elif self.aug_type == 'Auto':
+            return self.auto_aug(images)
 
     # select one augmentation operation randomly
     # operation magnitude selected random
@@ -42,16 +39,12 @@ class AutoAug(nn.Module):
             pil_img = transforms.ToPILImage()(image)
 
             # select one augmentation operation
-            if idx < len(self.hist):
-                oid, mag = self.hist[idx]
-            else:
-                oid = int(random.random() * self.num_aug)
-                if oid == self.num_aug:
-                    oid = oid - 1
-                mag = random.random()
-                self.hist.append((oid, mag))
-                if self.log:
-                    self.count[oid] = self.count[oid] + 1
+            oid = int(random.random() * self.num_op)
+            if oid == self.num_op:
+                oid = oid - 1
+            mag = random.random()
+            if self.log:
+                self.count[oid] = self.count[oid] + 1
 
             aug_img = transforms.ToTensor()(apply_augment(pil_img, self.aug_list[oid], mag))
             aug_images.append(self.stop_gradient(aug_img.to(self.cfg.device), mag))

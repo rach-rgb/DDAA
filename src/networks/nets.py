@@ -5,8 +5,6 @@ from .reparam_module import ReparamModule
 
 class LeNet(ReparamModule):
     def __init__(self, cfg):
-        if cfg.DATA_SET.name != 'MNIST':
-            raise RuntimeError("Cannot use dataset {} for LeNet".format(cfg.DATA_SET.name))
         num_classes = cfg.DATA_SET.num_classes
         num_channels = cfg.DATA_SET.num_channels
         input_size = cfg.DATA_SET.input_size

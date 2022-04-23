@@ -8,13 +8,13 @@ import torch.utils.data as data
 
 # create messy dataset
 class MessyDataset(data.Dataset):
-    def __init__(self, cfg, train, dataset, index=None, transform=None):
+    def __init__(self, cfg, dataset, mess, index=None, transform=None):
         x = dataset.data
         y = dataset.targets
 
         if index is not None: # subset
             x, y = self.get_subset(x, y, index)
-        if train is True:  # apply mess ratio for train set
+        if mess is True:  # apply mess ratio for train set
             x, y = self.make_mess(cfg, x, y)
 
         self.data = x

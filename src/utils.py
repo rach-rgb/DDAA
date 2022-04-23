@@ -8,7 +8,7 @@ import torch
 import numpy as np
 
 import matplotlib
-matplotlib.use('agg')  # this needs to be before the next line
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 
@@ -37,18 +37,18 @@ def load_results(cfg):
 def save_results(cfg, steps):
     steps = [(d.detach().cpu(), l.detach().cpu(), lr) for (d, l, lr) in steps]
 
-    output_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir)
+    output_dir = os.path.join(Path(os.getcwd()).parent, cfg.DISTILL.output_dir)
     output = os.path.join(output_dir, 'result.pth')
 
     torch.save(steps, output)
     logging.info('Distilled data saved to {}'.format(output))
 
-    if cfg.OUTPUT.vis_save is True:
+    if cfg.DISTILL.save_vis_output:
         visualize(cfg, steps)
         logging.info('Visualized data saved to {}'.format(output_dir))
 
 
-# visualize steps
+# save visualized distilled dataset
 def visualize(cfg, steps, epoch=None):
     if isinstance(steps[0][0], torch.Tensor):   # change to ndarray
         np_steps = []
@@ -63,9 +63,9 @@ def visualize(cfg, steps, epoch=None):
     dataset_vis_info = (cfg.DATA_SET.name, cfg.DATA_SET.num_channels, cfg.DATA_SET.input_size,
                         cfg.DATA_SET.mean, cfg.DATA_SET.std, cfg.DATA_SET.labels)
     if epoch is None:
-        vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir)
+        vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.DISTILL.output_dir)
     else:
-        vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.OUTPUT.dir, 'epoch'+str(epoch))
+        vis_dir = os.path.join(Path(os.getcwd()).parent, cfg.DISTILL.output_dir, 'epoch'+str(epoch))
         os.mkdir(vis_dir)
     vis_args = (steps, cfg.DISTILL.num_per_class, dataset_vis_info, vis_dir)
     _vis_results_fn(*vis_args)

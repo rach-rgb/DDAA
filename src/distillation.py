@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from networks.nets import LeNet
-from augmentation import AutoAug
+from augmentation import AugModule
 from augparams import ProjectModel
 from classification import StepClassifier
 
@@ -17,13 +17,14 @@ from utils import visualize
 class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.do_val = cfg.TASK.validation  # introduce validation
-        self.do_aug = cfg.TASK.augment  # apply augmentation
+        self.do_val = cfg.DISTILL.validation  # introduce validation
+        self.do_aug = cfg.DISTILL.augment  # apply augmentation
+        self.do_vis = cfg.DISTILL.save_vis_output
 
-        self.num_data_steps = cfg.DISTILL.d_steps  # how much data we have per epoch
-        self.T = cfg.DISTILL.d_steps * cfg.DISTILL.d_epochs  # total number of steps
-        # how much data to distill for each step
-        self.num_per_step = cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class
+        self.dd_step = cfg.DISTILL.d_steps      # data per epoch
+        self.dd_epoch = cfg.DISTILL.d_epochs    # number of epoch
+        self.num_steps = self.dd_step * self.dd_epoch   # total number of steps
+        self.data_per_step = cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class
 
         self.models = []
         self.params = []
@@ -56,20 +57,20 @@ class Distiller:
         distill_label = torch.arange(cfg.DATA_SET.num_classes, dtype=torch.long, device=cfg.device) \
             .repeat(cfg.DISTILL.num_per_class, 1)
         distill_label = distill_label.t().reshape(-1)  # [0, 0, ... , 1, 1, ... ]
-        for _ in range(self.num_data_steps):
+        for _ in range(self.dd_step):
             self.labels.append(distill_label)
             # don't distill labels
 
         # data
-        for _ in range(self.num_data_steps):
-            distill_data = torch.randn(self.num_per_step, cfg.DATA_SET.num_channels, cfg.DATA_SET.input_size,
+        for _ in range(self.dd_step):
+            distill_data = torch.randn(self.data_per_step, cfg.DATA_SET.num_channels, cfg.DATA_SET.input_size,
                                        cfg.DATA_SET.input_size, device=cfg.device, requires_grad=True)
             self.data.append(distill_data)
             self.params.append(distill_data)
 
         # learning rate
         raw_init_distill_lr = torch.tensor(cfg.DISTILL.d_lr, device=cfg.device)
-        raw_init_distill_lr = raw_init_distill_lr.repeat(self.T, 1)
+        raw_init_distill_lr = raw_init_distill_lr.repeat(self.dd_step * self.dd_epoch, 1)
         self.raw_distill_lrs = raw_init_distill_lr.expm1_().log_().requires_grad_()
         self.params.append(self.raw_distill_lrs)
 
@@ -78,7 +79,7 @@ class Distiller:
 
     # return label, distilled data and learning rate in a list
     def get_steps(self):
-        total_data = (x for _ in range(self.cfg.DISTILL.d_epochs) for x in zip(self.data, self.labels))
+        total_data = (x for _ in range(self.dd_epoch) for x in zip(self.data, self.labels))
         lrs = F.softplus(self.raw_distill_lrs).unbind()
 
         steps = []
@@ -163,29 +164,42 @@ class Distiller:
 
     # distill dataset
     def distill(self):
+        logging.info('Apply dataset distillation')
+
         cfg = self.cfg
         device = cfg.device
         num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
-        vis_intv = cfg.DISTILL.vis_intv
-        val_intv = 0
         val_model = None
         aug_model = None
 
-        # initialize validation related models
+        # initialize validation related values
         if self.do_val:
             val_model = StepClassifier(cfg)
             val_intv = cfg.DISTILL.val_intv
+        else:
+            val_intv = cfg.DISTILL.epoch + 999
+
+        if self.do_vis:
+            vis_intv = cfg.DISTILL.vis_intv
+        else:
+            vis_intv = cfg.DISTILL.epoch + 999
 
         # initialize augmentation related models
         if self.do_aug:
-            if self.cfg.AUGMENT.do_auto:    # use auto-augmentation
-                # TODO: initialize projection model
-                p_model = ProjectModel(1, 1, 1, 1).to(cfg.device)
-                aug_model = AutoAug(cfg, p_model)
-                # TODO: set optimizer for projection model
+            if cfg.DATA_SET.name != cfg.D_AUGMENT.name:
+                logging.exception("Dataset Mismatch")
+                raise
+            if cfg.D_AUGMENT.aug_type == 'Random':
+                aug_model = AugModule(cfg.device, cfg.D_AUGMENT)
+            elif cfg.D_AUGMENT.aug_type == 'Auto':
+                # TODO : implement auto-augmentation
+                # initialize projection model & set optimizer
+                p_model = ProjectModel(1, 1, 1, 1)
+                aug_model = AugModule(cfg.device, cfg.D_AUGMENT, p_model)
             else:
-                aug_model = AutoAug(cfg)
+                logging.exception("Wrong Augmentation type")
+                raise
 
         data_t0 = time.time()
 
@@ -212,8 +226,13 @@ class Distiller:
 
             # apply augmentation
             if self.do_aug:
-                rdata = torch.cat([rdata, aug_model.augment(rdata)], dim=0)
-                rlabel = torch.cat([rlabel, rlabel], dim=0)
+                augdata = []
+                auglabel = []
+                for i in range(0, aug_model.num_data):
+                    augdata.append(aug_model.augment(rdata))
+                    auglabel.append(rlabel)
+                rdata = augdata
+                rlabel = auglabel
 
             task_models = self.models   # subnetworks
 
@@ -251,7 +270,7 @@ class Distiller:
             data_t0 = time.time()
 
         logging.info('Distillation finished')
-        if self.cfg.TASK.augment and self.cfg.AUGMENT.log:
+        if self.do_aug and self.cfg.D_AUGMENT.log:
             aug_model.log_history()
 
         # return results
