@@ -47,7 +47,7 @@ class AugModule(nn.Module):
                 self.count[oid] = self.count[oid] + 1
 
             aug_img = transforms.ToTensor()(apply_augment(pil_img, self.aug_list[oid], mag))
-            aug_images.append(self.stop_gradient(aug_img.to(self.cfg.device), mag))
+            aug_images.append(self.stop_gradient(aug_img.to(self.device), mag))
         return torch.stack(aug_images, dim=0)
 
     def auto_aug(self, images):

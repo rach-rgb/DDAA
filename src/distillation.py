@@ -178,12 +178,12 @@ class Distiller:
             val_model = StepClassifier(cfg)
             val_intv = cfg.DISTILL.val_intv
         else:
-            val_intv = cfg.DISTILL.epoch + 999
+            val_intv = cfg.DISTILL.epochs + 999
 
         if self.do_vis:
             vis_intv = cfg.DISTILL.vis_intv
         else:
-            vis_intv = cfg.DISTILL.epoch + 999
+            vis_intv = cfg.DISTILL.epochs + 999
 
         # initialize augmentation related models
         if self.do_aug:
@@ -216,7 +216,7 @@ class Distiller:
                 val_model.set_step(steps)
                 val_model.train_and_evaluate(valid=True)
 
-            if it == 0 and epoch % vis_intv == 0:   # save visualized intermediate result
+            if self.do_vis and it == 0 and epoch % vis_intv == 0:   # save visualized intermediate result
                 with torch.no_grad():
                     steps = self.get_steps()
                 visualize(cfg, steps, epoch)
@@ -226,14 +226,13 @@ class Distiller:
 
             # apply augmentation
             if self.do_aug:
-                augdata = []
-                auglabel = []
+                augdata = [rdata]
+                auglabel = [rlabel]
                 for i in range(0, aug_model.num_data):
                     augdata.append(aug_model.augment(rdata))
                     auglabel.append(rlabel)
-                rdata = augdata
-                rlabel = auglabel
-
+                rdata = torch.cat(augdata, dim=0)
+                rlabel = torch.cat(auglabel, dim=0)
             task_models = self.models   # subnetworks
 
             t0 = time.time()

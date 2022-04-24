@@ -54,7 +54,7 @@ class Config(object):
                 c = Config(dict_config[key])
                 if key == 'DATA_SET':
                     Config.init_dataset(c)
-                if key == 'AUGMENT':
+                if key == 'D_AUGMENT' or key == 'T_AUGMENT':
                     Config.init_augment(c)
                 self.__dict__[key] = c
             else:

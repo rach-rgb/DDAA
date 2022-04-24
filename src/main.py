@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 
 from config import Config
 from dataset import MessyDataset
+from augmentation import AugModule
 from distillation import Distiller
 from utils import save_results, load_results
 from classification import Classifier, StepClassifier
@@ -64,11 +65,11 @@ def main(cfg):
             save_results(cfg, steps)
 
     # train and evaluate model
-    if cfg.TASK.train is True:
+    if cfg.TASK.train:
         if cfg.TASK.distill is True:
             logging.info('Use distilled dataset with size: %d for training', len(steps))
             cls = StepClassifier(cfg)
-            cls.set_step(steps)
+            cls.set_step(steps, AugModule(device, cfg.T_AUGMENT))
             cls.train_and_evaluate()
         else:
             Classifier(cfg).train_and_evaluate()
@@ -82,7 +83,6 @@ if __name__ == '__main__':
             config_dir = 'default.yaml'
         else:
             config_dir = sys.argv[1]
-        main(Config.from_yaml('../configs/dd.yaml'))
         main(Config.from_yaml(path.join('../configs/', config_dir)))
     except Exception:
         logging.exception("No configuration")

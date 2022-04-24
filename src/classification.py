@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 
 from networks.nets import LeNet
-
+from augmentation import AugModule
 
 # Simple classifier to evaluate dataset
 class Classifier:
@@ -89,7 +89,7 @@ class Classifier:
         for epoch in range(1, self.epochs + 1):
             t0 = time.time()
             self.train()
-            train_time += (time.time()-t0)
+            train_time += (time.time() - t0)
             if do_evaluate and (epoch % test_intv == 0):
                 loss, accu = self.test(valid)
                 logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
@@ -103,7 +103,7 @@ class Classifier:
                 logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
             else:
                 logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
-        logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time/self.epochs))
+        logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time / self.epochs))
 
 
 # classifier using steps instead of train loader
@@ -112,8 +112,20 @@ class StepClassifier(Classifier):
         super().__init__(cfg)
         self.steps = None
 
-    def set_step(self, step):
-        self.steps = step
+    def set_step(self, steps, aug_module=None):
+        if self.cfg.TRAIN.augment:
+            self.steps = []
+            for data, label, lr in steps:
+                data = data.detach()
+                label = label.detach()
+                lr = lr.detach()
+
+                self.steps.append((data, label, lr))
+                for i in range(0, aug_module.num_data):
+                    self.steps.append((aug_module.augment(data), label, lr))
+            logging.info("Augmented dataset: %d", len(self.steps))
+        else:
+            self.steps = steps
 
     def train(self):
         steps = self.steps
