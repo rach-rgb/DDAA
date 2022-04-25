@@ -32,18 +32,10 @@ class Config(object):
     def init_augment(cfg):
         if cfg.name == 'MNIST':
             aug_info = {
-                'aug_list': [
-                    'ShearX',
-                    'ShearY',
-                    'TranslateX',
-                    'TranslateY',
-                    'Rotate',
-                    'Sharpness',
-                    'Cutout',
-                    'Flip',
-                    'Identity'
-                ]
+                'num_classes': 10,
+                'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Sharpness', 'Cutout']
             }
+
         else:
             raise RuntimeError("Dataset {} not implemented".format(cfg.name))
         cfg.set_attribute(aug_info)

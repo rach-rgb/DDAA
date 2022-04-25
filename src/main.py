@@ -45,7 +45,7 @@ def main(cfg):
 
     train_loader = data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     cfg.train_loader = train_loader
-    logging.info('Load train dataset: %s, size: %d, class imbalance: %.2f, label noise: %.1f',
+    logging.info('Load train dataset: %s, size: %d, class imbalance: %.2f, label noise: %.2f',
                  cfg.DATA_SET.name, len(train_loader.dataset), cfg.DATA_SET.imbalance, cfg.DATA_SET.noise)
 
     # test set
@@ -69,7 +69,10 @@ def main(cfg):
         if cfg.TASK.distill is True:
             logging.info('Use distilled dataset with size: %d for training', len(steps))
             cls = StepClassifier(cfg)
-            cls.set_step(steps, AugModule(device, cfg.T_AUGMENT))
+            if cfg.TRAIN.augment:
+                cls.set_step(steps, AugModule(device, cfg.T_AUGMENT))
+            else:
+                cls.set_step(steps)
             cls.train_and_evaluate()
         else:
             Classifier(cfg).train_and_evaluate()

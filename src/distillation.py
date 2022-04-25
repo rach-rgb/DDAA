@@ -224,8 +224,10 @@ class Distiller:
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
-            # apply augmentation
+            # Raw Data Augmentation
             if self.do_aug:
+                if self.cfg.D_AUGMENT.aug_fix == 1 and it == 0:
+                    aug_model.reset_op()
                 augdata = [rdata]
                 auglabel = [rlabel]
                 for i in range(0, aug_model.num_data):
@@ -233,6 +235,7 @@ class Distiller:
                     auglabel.append(rlabel)
                 rdata = torch.cat(augdata, dim=0)
                 rlabel = torch.cat(auglabel, dim=0)
+
             task_models = self.models   # subnetworks
 
             t0 = time.time()

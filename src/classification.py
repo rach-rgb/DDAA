@@ -113,7 +113,7 @@ class StepClassifier(Classifier):
         self.steps = None
 
     def set_step(self, steps, aug_module=None):
-        if self.cfg.TRAIN.augment:
+        if aug_module is not None:
             self.steps = []
             for data, label, lr in steps:
                 data = data.detach()
