@@ -46,6 +46,9 @@ class AugModule(nn.Module):
             aug_label.append(rlabel)
         return torch.cat(aug_data, dim=0), torch.cat(aug_label, dim=0)
 
+    def __call__(self, img):
+        return self.augment(img)
+
     def augment(self, images):
         if self.aug_type == 'Random':
             return self.rand_aug(images)

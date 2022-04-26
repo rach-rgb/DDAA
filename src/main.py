@@ -79,6 +79,8 @@ def main(cfg):
                 cls.set_step(steps)
             cls.train_and_evaluate()
         else:
+            if cfg.TRAIN.augment:
+                train_dataset.transform.transforms.insert(0, AugModule(device, cfg.TAUG))
             Classifier(cfg).train_and_evaluate()
 
 
