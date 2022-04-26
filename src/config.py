@@ -32,10 +32,11 @@ class Config(object):
     def init_augment(cfg):
         if cfg.name == 'MNIST':
             aug_info = {
+                'mean': 0.1307,
+                'std': 0.3081,  # normalization
                 'num_classes': 10,
                 'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Sharpness', 'Cutout']
             }
-
         else:
             raise RuntimeError("Dataset {} not implemented".format(cfg.name))
         cfg.set_attribute(aug_info)
@@ -46,7 +47,7 @@ class Config(object):
                 c = Config(dict_config[key])
                 if key == 'DATA_SET':
                     Config.init_dataset(c)
-                if key == 'D_AUGMENT' or key == 'T_AUGMENT':
+                if key == 'RAUG' or key == 'DAUG' or key == 'TAUG':
                     Config.init_augment(c)
                 self.__dict__[key] = c
             else:

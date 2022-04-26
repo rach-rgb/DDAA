@@ -18,7 +18,8 @@ class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
         self.do_val = cfg.DISTILL.validation  # introduce validation
-        self.do_aug = cfg.DISTILL.augment  # apply augmentation
+        self.do_raug = cfg.DISTILL.raw_augment  # apply augmentation for raw data
+        self.do_daug = cfg.DISTILL.dd_augment   # apply augmentation for distilled data
         self.do_vis = cfg.DISTILL.save_vis_output
 
         self.dd_step = cfg.DISTILL.d_steps      # data per epoch
@@ -101,7 +102,7 @@ class Distiller:
             torch.autograd.backward(bwd_out, bwd_grad)
 
     # train task model using distilled data
-    def forward(self, model, rdata, rlabel, steps):
+    def forward(self, model, rdata, rlabel, steps, aug_model=None):
         # forward distilled dataset
         model.train()
         w = model.get_param()
@@ -119,6 +120,12 @@ class Distiller:
                 params.append(new_w)
                 gws.append(gw)
                 w = new_w
+
+        # apply augmentation on distilled dataset
+        if self.do_daug:
+            # TODO: ????
+            logging.exception("Augment on Distilled Dataset Not Implemented")
+            raise
 
         # calculate loss using train data
         model.eval()
@@ -171,7 +178,8 @@ class Distiller:
         num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
         val_model = None
-        aug_model = None
+        raug_model = None
+        daug_model = None
 
         # initialize validation related values
         if self.do_val:
@@ -186,17 +194,33 @@ class Distiller:
             vis_intv = cfg.DISTILL.epochs + 999
 
         # initialize augmentation related models
-        if self.do_aug:
-            if cfg.DATA_SET.name != cfg.D_AUGMENT.name:
+        if self.do_raug:
+            if cfg.DATA_SET.name != cfg.RAUG.name:
                 logging.exception("Dataset Mismatch")
                 raise
-            if cfg.D_AUGMENT.aug_type == 'Random':
-                aug_model = AugModule(cfg.device, cfg.D_AUGMENT)
-            elif cfg.D_AUGMENT.aug_type == 'Auto':
+
+            if cfg.RAUG.aug_type == 'Random':
+                raug_model = AugModule(cfg.device, cfg.RAUG)
+            elif cfg.RAUG.aug_type == 'Auto':
                 # TODO : implement auto-augmentation
                 # initialize projection model & set optimizer
                 p_model = ProjectModel(1, 1, 1, 1)
-                aug_model = AugModule(cfg.device, cfg.D_AUGMENT, p_model)
+                raug_model = AugModule(cfg.device, cfg.RAUG, p_model)
+            else:
+                logging.exception("Wrong Augmentation type")
+                raise
+        if self.do_daug:
+            if cfg.DATA_SET.name != cfg.DAUG.name:
+                logging.exception("Dataset Mismatch")
+                raise
+
+            if cfg.DAUG.aug_type == 'Random':
+                daug_model = AugModule(cfg.device, cfg.DAUG)
+            elif cfg.DAUG.aug_type == 'Auto':
+                # TODO : implement auto-augmentation
+                # initialize projection model & set optimizer
+                p_model = ProjectModel(1, 1, 1, 1)
+                daug_model = AugModule(cfg.device, cfg.DAUG, p_model)
             else:
                 logging.exception("Wrong Augmentation type")
                 raise
@@ -225,16 +249,8 @@ class Distiller:
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
             # Raw Data Augmentation
-            if self.do_aug:
-                if self.cfg.D_AUGMENT.aug_fix == 1 and it == 0:
-                    aug_model.reset_op()
-                augdata = [rdata]
-                auglabel = [rlabel]
-                for i in range(0, aug_model.num_data):
-                    augdata.append(aug_model.augment(rdata))
-                    auglabel.append(rlabel)
-                rdata = torch.cat(augdata, dim=0)
-                rlabel = torch.cat(auglabel, dim=0)
+            if self.do_raug:
+                rdata, rlabel = raug_model.augment_raw(rdata, rlabel)
 
             task_models = self.models   # subnetworks
 
@@ -272,8 +288,8 @@ class Distiller:
             data_t0 = time.time()
 
         logging.info('Distillation finished')
-        if self.do_aug and self.cfg.D_AUGMENT.log:
-            aug_model.log_history()
+        if self.do_raug and self.cfg.RAUG.log:
+            raug_model.log_history()
 
         # return results
         with torch.no_grad():

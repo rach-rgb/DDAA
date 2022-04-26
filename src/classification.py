@@ -114,15 +114,7 @@ class StepClassifier(Classifier):
 
     def set_step(self, steps, aug_module=None):
         if aug_module is not None:
-            self.steps = []
-            for data, label, lr in steps:
-                data = data.detach()
-                label = label.detach()
-                lr = lr.detach()
-
-                self.steps.append((data, label, lr))
-                for i in range(0, aug_module.num_data):
-                    self.steps.append((aug_module.augment(data), label, lr))
+            self.steps = aug_module.augment_steps(steps)
             logging.info("Augmented dataset: %d", len(self.steps))
         else:
             self.steps = steps

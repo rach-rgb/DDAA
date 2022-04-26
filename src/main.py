@@ -66,11 +66,15 @@ def main(cfg):
 
     # train and evaluate model
     if cfg.TASK.train:
+        cls = StepClassifier(cfg)
         if cfg.TASK.distill is True:
+            if not cfg.TRAIN.use_full_steps:
+                steps = steps[:cfg.DISTILL.d_steps]
             logging.info('Use distilled dataset with size: %d for training', len(steps))
-            cls = StepClassifier(cfg)
             if cfg.TRAIN.augment:
-                cls.set_step(steps, AugModule(device, cfg.T_AUGMENT))
+                cls.set_step(steps, AugModule(device, cfg.TAUG))
+                save_results(cfg, cls.steps)    # Remove Later
+                exit()                          # Remove Later
             else:
                 cls.set_step(steps)
             cls.train_and_evaluate()

@@ -14,14 +14,10 @@ class AugModule(nn.Module):
         self.cfg = aug_cfg
         self.device = device
         self.aug_type = aug_cfg.aug_type
-        self.aug_fix = aug_cfg.aug_fix  # 0: fix (*), 1: fix (epoch, label, *)
         self.aug_list = aug_cfg.aug_list
         self.num_op = len(self.aug_list)
         self.num_data = aug_cfg.aug_num
         self.p_layer = p_layer
-
-        # operation history for aug_fix = 1
-        self.op_cache = {}
 
         # log selected operation
         self.log = aug_cfg.log
@@ -30,21 +26,33 @@ class AugModule(nn.Module):
             for i in range(0, self.num_op):
                 self.op_count[i] = 0
 
-    def augment(self, images, info=None):
-        if self.aug_fix == 1:
-            if self.aug_type == 'Random':
-                return self.rand_aug_fixed(images, info)
-            elif self.aug_type == 'Auto':
-                logging.exception("Not Implemented")
-                raise
+    def augment_steps(self, steps):
+        aug_steps = []
+        for data, label, lr in steps:
+            data = data.detach()
+            label = label.detach()
+            lr = lr.detach()
 
+            aug_steps.append((data, label, lr))
+            for i in range(0, self.num_data):
+                aug_steps.append((self.augment(data), label, lr))
+        return aug_steps
+
+    def augment_raw(self, rdata, rlabel):
+        aug_data = [rdata]
+        aug_label = [rlabel]
+        for i in range(0, self.num_data):
+            aug_data.append(self.augment(rdata))
+            aug_label.append(rlabel)
+        return torch.cat(aug_data, dim=0), torch.cat(aug_label, dim=0)
+
+    def augment(self, images):
         if self.aug_type == 'Random':
             return self.rand_aug(images)
         elif self.aug_type == 'Auto':
             return self.auto_aug(images)
 
-    # select one augmentation operation randomly
-    # operation magnitude selected random
+    # apply random augmentation with random magnitude
     def rand_aug(self, images):
         aug_images = []
         for image in images:
@@ -57,29 +65,6 @@ class AugModule(nn.Module):
             mag = random.random()
             if self.log:
                 self.op_count[oid] = self.op_count[oid] + 1
-
-            aug_img = transforms.ToTensor()(apply_augment(pil_img, self.aug_list[oid], mag))
-            aug_images.append(self.stop_gradient(aug_img.to(self.device), mag))
-        return torch.stack(aug_images, dim=0)
-
-    def rand_aug_fixed(self, images, info):
-        labels = info
-
-        aug_images = []
-        for image, label in zip(images, labels):
-            pil_img = transforms.ToPILImage()(image)
-
-            # select one augmentation operation
-            if labels in self.op_hist:
-                oid, mag = self.op_hist[labels]
-            else:
-                oid = int(random.random() * self.num_op)
-                if oid == self.num_op:
-                    oid = oid - 1
-                mag = random.random()
-                self.op_hist[labels] = (oid, mag)
-                if self.log:
-                    self.op_count[oid] = self.op_count[oid] + 1
 
             aug_img = transforms.ToTensor()(apply_augment(pil_img, self.aug_list[oid], mag))
             aug_images.append(self.stop_gradient(aug_img.to(self.device), mag))
@@ -99,9 +84,6 @@ class AugModule(nn.Module):
         adds = adds + magnitude
         images = images.detach() + adds
         return images
-
-    def reset_op(self):
-        self.op_cache = {}
 
     def log_history(self):
         for k, v in self.op_count.items():
