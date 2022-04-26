@@ -178,7 +178,6 @@ class Distiller:
         num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
         val_model = None
-        raug_model = None
         daug_model = None
 
         # initialize validation related values
@@ -195,20 +194,18 @@ class Distiller:
 
         # initialize augmentation related models
         if self.do_raug:
-            if cfg.DATA_SET.name != cfg.RAUG.name:
-                logging.exception("Dataset Mismatch")
-                raise
-
             if cfg.RAUG.aug_type == 'Random':
-                raug_model = AugModule(cfg.device, cfg.RAUG)
+                aug_module = AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
                 # TODO : implement auto-augmentation
                 # initialize projection model & set optimizer
-                p_model = ProjectModel(1, 1, 1, 1)
-                raug_model = AugModule(cfg.device, cfg.RAUG, p_model)
+                # p_model = ProjectModel(1, 1, 1, 1)
+                # aug_module = AugModule(device, cfg.RAUG, p_model)
+                aug_module = None
             else:
-                logging.exception("Wrong Augmentation type")
-                raise
+                aug_module = None
+            cfg.train_loader.dataset.transform.transforms.insert(0, aug_module)
+
         if self.do_daug:
             if cfg.DATA_SET.name != cfg.DAUG.name:
                 logging.exception("Dataset Mismatch")
@@ -248,10 +245,6 @@ class Distiller:
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
-            # Raw Data Augmentation
-            if self.do_raug:
-                rdata, rlabel = raug_model.augment_raw(rdata, rlabel)
-
             task_models = self.models   # subnetworks
 
             t0 = time.time()
@@ -288,8 +281,6 @@ class Distiller:
             data_t0 = time.time()
 
         logging.info('Distillation finished')
-        if self.do_raug and self.cfg.RAUG.log:
-            raug_model.log_history()
 
         # return results
         with torch.no_grad():

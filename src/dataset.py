@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from PIL import Image
 import torch.utils.data as data
+from torchvision import transforms
 
 
 # create messy dataset
@@ -76,3 +77,59 @@ class MessyDataset(data.Dataset):
             y = torch.cat([y[:len(y) - int(len(y) * noise_r)], noise])
 
         return x, y
+
+
+# Create Dataset from steps
+class StepDataset(data.Dataset):
+    def __init__(self, steps, cfg=None):
+        if cfg is not None:
+            nc = cfg.DATA_SET.num_channels
+            mean = cfg.DATA_SET.mean, std = cfg.DATA_SET.std
+        else:
+            nc = 1
+            mean = 0.1307
+            std = 0.3081
+
+        self.data, self.targets = self.convert(mean, std, nc, steps)
+
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((mean,), (std,))
+        ])
+
+    def convert(self, mean, std, nc, steps):
+        # convert torch to nparray
+        if isinstance(steps[0][0], torch.Tensor):
+            np_steps = []
+            for data, label, lr in steps:
+                np_data = data.detach().permute(0, 2, 3, 1).to('cpu').numpy()
+                np_label = label.detach().to('cpu').numpy()
+                if lr is not None:
+                    lr = lr.detach().cpu().numpy()
+                np_steps.append((np_data, np_label, lr))
+            steps = np_steps
+
+        # generate PIL image
+        x = []
+        y = []
+        for i, (data, labels, lr) in enumerate(steps):
+            for n, (img, label) in enumerate(zip(data, labels)):
+                if nc == 1:
+                    img = img[..., 0]
+                img = ((img * std + mean).clip(0, 1) * 255).astype(np.uint8)
+                x.append(img)
+                y.append(label)
+        return x, y
+
+    def __getitem__(self, idx):
+        img, target = self.data[idx], int(self.targets[idx])
+
+        img = Image.fromarray(img)
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        return img, target
+
+    def __len__(self):
+        return len(self.data)

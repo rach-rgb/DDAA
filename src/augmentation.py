@@ -1,11 +1,10 @@
-import logging
 import random
 
 import torch
 import torch.nn as nn
 from torchvision import transforms
 
-from operations import apply_augment
+from src.operations import apply_augment
 
 
 class AugModule(nn.Module):
@@ -19,13 +18,6 @@ class AugModule(nn.Module):
         self.num_data = aug_cfg.aug_num
         self.p_layer = p_layer
 
-        # log selected operation
-        self.log = aug_cfg.log
-        if self.log:
-            self.op_count = {}
-            for i in range(0, self.num_op):
-                self.op_count[i] = 0
-
     def augment_steps(self, steps):
         aug_steps = []
         for data, label, lr in steps:
@@ -38,25 +30,20 @@ class AugModule(nn.Module):
                 aug_steps.append((self.augment(data), label, lr))
         return aug_steps
 
-    def augment_raw(self, rdata, rlabel):
-        aug_data = [rdata]
-        aug_label = [rlabel]
-        for i in range(0, self.num_data):
-            aug_data.append(self.augment(rdata))
-            aug_label.append(rlabel)
-        return torch.cat(aug_data, dim=0), torch.cat(aug_label, dim=0)
-
     def __call__(self, img):
-        return self.augment(img)
+        if self.aug_type == 'Random':
+            return apply_augment(img, random.choice(self.aug_list), random.random())
+        elif self.aug_type == 'Auto':
+            return self.auto_aug(img)
 
     def augment(self, images):
         if self.aug_type == 'Random':
-            return self.rand_aug(images)
+            return self.rand_aug_tensor(images)
         elif self.aug_type == 'Auto':
             return self.auto_aug(images)
 
     # apply random augmentation with random magnitude
-    def rand_aug(self, images):
+    def rand_aug_tensor(self, images):
         aug_images = []
         for image in images:
             pil_img = transforms.ToPILImage()(image)
@@ -87,7 +74,3 @@ class AugModule(nn.Module):
         adds = adds + magnitude
         images = images.detach() + adds
         return images
-
-    def log_history(self):
-        for k, v in self.op_count.items():
-            logging.info("%s: %d", self.aug_list[k], v)

@@ -68,6 +68,7 @@ def main(cfg):
     if cfg.TASK.train:
         cls = StepClassifier(cfg)
         if cfg.TASK.distill is True:
+            cfg.test_train_loader = cfg.train_loader    # TODO
             if not cfg.TRAIN.use_full_steps:
                 steps = steps[:cfg.DISTILL.d_steps]
             logging.info('Use distilled dataset with size: %d for training', len(steps))
@@ -79,6 +80,7 @@ def main(cfg):
                 cls.set_step(steps)
             cls.train_and_evaluate()
         else:
+            cfg.test_train_loader = cfg.train_loader    # use train loader
             if cfg.TRAIN.augment:
                 train_dataset.transform.transforms.insert(0, AugModule(device, cfg.TAUG))
             Classifier(cfg).train_and_evaluate()

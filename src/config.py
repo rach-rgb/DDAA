@@ -36,7 +36,7 @@ class Config(object):
                 'std': 0.3081,  # normalization
                 'num_classes': 10,
                 'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Sharpness', 'Cutout',
-                             'identity']
+                             'Identity']
             }
         else:
             raise RuntimeError("Dataset {} not implemented".format(cfg.name))

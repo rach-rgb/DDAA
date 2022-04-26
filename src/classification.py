@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 
 from networks.nets import LeNet
-from augmentation import AugModule
+
 
 # Simple classifier to evaluate dataset
 class Classifier:
@@ -33,7 +33,7 @@ class Classifier:
         device = self.cfg.device
         optimizer = self.optimizer
         scheduler = self.scheduler
-        train_loader = self.cfg.train_loader
+        train_loader = self.cfg.test_train_loader
 
         model.train()
         for data, label in train_loader:
