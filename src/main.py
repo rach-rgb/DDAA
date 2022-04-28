@@ -8,7 +8,7 @@ from torchvision import datasets, transforms
 from sklearn.model_selection import train_test_split
 
 from config import Config
-from dataset import MessyDataset
+from dataset import MessyDataset, StepDataset
 from augmentation import AugModule
 from distillation import Distiller
 from utils import save_results, load_results
@@ -61,23 +61,22 @@ def main(cfg):
             steps = load_results(cfg)
         else:
             steps = Distiller(cfg).distill()
-        if cfg.DISTILL.save_output is True:
-            save_results(cfg, steps)
+            if cfg.DISTILL.save_output is True:
+                save_results(cfg, steps)
 
     # train and evaluate model
     if cfg.TASK.train:
         cls = StepClassifier(cfg)
         if cfg.TASK.distill is True:
-            cfg.test_train_loader = cfg.train_loader    # TODO
+            step_dataset = StepDataset(steps)
+            loader = data.DataLoader(step_dataset, 1, shuffle=True, num_workers=1, pin_memory=True)
+            cfg.test_train_loader = loader
             if not cfg.TRAIN.use_full_steps:
                 steps = steps[:cfg.DISTILL.d_steps]
             logging.info('Use distilled dataset with size: %d for training', len(steps))
             if cfg.TRAIN.augment:
-                cls.set_step(steps, AugModule(device, cfg.TAUG))
-                save_results(cfg, cls.steps)    # Remove Later
-                exit()                          # Remove Later
-            else:
-                cls.set_step(steps)
+                step_dataset.transform.transforms.insert(0, AugModule(device, cfg.TAUG))
+            cls.set_step(steps)
             cls.train_and_evaluate()
         else:
             cfg.test_train_loader = cfg.train_loader    # use train loader

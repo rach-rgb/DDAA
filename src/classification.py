@@ -112,30 +112,26 @@ class StepClassifier(Classifier):
         super().__init__(cfg)
         self.steps = None
 
-    def set_step(self, steps, aug_module=None):
-        if aug_module is not None:
-            self.steps = aug_module.augment_steps(steps)
-            logging.info("Augmented dataset: %d", len(self.steps))
-        else:
-            self.steps = steps
+    def set_step(self, steps):
+        self.steps = steps
 
-    def train(self):
-        steps = self.steps
-        assert steps is not None
-
-        model = self.model
-        optimizer = self.optimizer
-        scheduler = self.scheduler
-
-        model.train()
-        for step, (data, label, lr) in enumerate(steps):
-            data = data.detach()
-            label = label.detach()
-            lr = lr.detach()
-
-            optimizer.zero_grad()
-            output = model(data)
-            loss = F.cross_entropy(output, label)
-            loss.backward(lr.squeeze())
-            optimizer.step()
-        scheduler.step()
+    # def train(self):
+    #     steps = self.steps
+    #     assert steps is not None
+    #
+    #     model = self.model
+    #     optimizer = self.optimizer
+    #     scheduler = self.scheduler
+    #
+    #     model.train()
+    #     for step, (data, label, lr) in enumerate(steps):
+    #         data = data.detach()
+    #         label = label.detach()
+    #         lr = lr.detach()
+    #
+    #         optimizer.zero_grad()
+    #         output = model(data)
+    #         loss = F.cross_entropy(output, label)
+    #         loss.backward(lr.squeeze())
+    #         optimizer.step()
+    #     scheduler.step()
