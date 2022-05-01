@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 from networks.nets import LeNet
 from augmentation import AugModule
-from augparams import ProjectModel
+from augparams import Projector
 from classification import StepClassifier
 
 # Dataset Distillation Module
@@ -19,12 +19,12 @@ class Distiller:
         self.cfg = cfg
         self.do_val = cfg.DISTILL.validation  # introduce validation
         self.do_raug = cfg.DISTILL.raw_augment  # apply augmentation for raw data
-        self.do_daug = cfg.DISTILL.dd_augment   # apply augmentation for distilled data
+        self.do_daug = cfg.DISTILL.dd_augment  # apply augmentation for distilled data
         self.do_vis = cfg.DISTILL.save_vis_output
 
-        self.dd_step = cfg.DISTILL.d_steps      # data per epoch
-        self.dd_epoch = cfg.DISTILL.d_epochs    # number of epoch
-        self.num_steps = self.dd_step * self.dd_epoch   # total number of steps
+        self.dd_step = cfg.DISTILL.d_steps  # data per epoch
+        self.dd_epoch = cfg.DISTILL.d_epochs  # number of epoch
+        self.num_steps = self.dd_step * self.dd_epoch  # total number of steps
         self.data_per_step = cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class
 
         self.models = []
@@ -102,7 +102,7 @@ class Distiller:
             torch.autograd.backward(bwd_out, bwd_grad)
 
     # train task model using distilled data
-    def forward(self, model, rdata, rlabel, steps, aug_model=None):
+    def forward(self, model, rdata, rlabel, steps):
         # forward distilled dataset
         model.train()
         w = model.get_param()
@@ -120,12 +120,6 @@ class Distiller:
                 params.append(new_w)
                 gws.append(gw)
                 w = new_w
-
-        # apply augmentation on distilled dataset
-        if self.do_daug:
-            # TODO: ????
-            logging.exception("Augment on Distilled Dataset Not Implemented")
-            raise
 
         # calculate loss using train data
         model.eval()
@@ -178,7 +172,6 @@ class Distiller:
         num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
         val_model = None
-        daug_model = None
 
         # initialize validation related values
         if self.do_val:
@@ -193,34 +186,29 @@ class Distiller:
             vis_intv = cfg.DISTILL.epochs + 999
 
         # initialize augmentation related models
+        p_optimizer = None
+        aug_module = None
+        search_intv = cfg.DISTILL.epochs + 999
         if self.do_raug:
             if cfg.RAUG.aug_type == 'Random':
                 aug_module = AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
-                # TODO : implement auto-augmentation
-                # initialize projection model & set optimizer
-                # p_model = ProjectModel(1, 1, 1, 1)
-                # aug_module = AugModule(device, cfg.RAUG, p_model)
-                aug_module = None
+                p_module = Projector(cfg.DATA_SET.input_size, 2 * len(cfg.RAUG.aug_list))
+                p_optimizer = torch.optim.Adam(
+                    p_module.parameters(),
+                    lr=cfg.RAUG.p_lr,
+                    betas=(0.9, 0.999),
+                    weight_decay=cfg.RAUG.p_decay_factor
+                )
+                aug_module = AugModule(device, cfg.RAUG, project_module=p_module)
             else:
-                aug_module = None
+                logging.info("Not implemented")
+                raise
             cfg.train_loader.dataset.transform.transforms.insert(0, aug_module)
 
         if self.do_daug:
-            if cfg.DATA_SET.name != cfg.DAUG.name:
-                logging.exception("Dataset Mismatch")
-                raise
-
-            if cfg.DAUG.aug_type == 'Random':
-                daug_model = AugModule(cfg.device, cfg.DAUG)
-            elif cfg.DAUG.aug_type == 'Auto':
-                # TODO : implement auto-augmentation
-                # initialize projection model & set optimizer
-                p_model = ProjectModel(1, 1, 1, 1)
-                daug_model = AugModule(cfg.device, cfg.DAUG, p_model)
-            else:
-                logging.exception("Wrong Augmentation type")
-                raise
+            logging.exception("Not implemented")
+            raise
 
         data_t0 = time.time()
 
@@ -230,14 +218,14 @@ class Distiller:
             if it == 0 and not epoch == 0:
                 self.scheduler.step()
 
-            if self.do_val and it == 0 and epoch % val_intv == 0:   # validation
+            if self.do_val and it == 0 and epoch % val_intv == 0:  # validation
                 logging.info('Begin of epoch {} validation result'.format(epoch))
                 with torch.no_grad():
                     steps = self.get_steps()
                 val_model.set_step(steps)
                 val_model.train_and_evaluate(valid=True)
 
-            if self.do_vis and it == 0 and epoch % vis_intv == 0:   # save visualized intermediate result
+            if self.do_vis and it == 0 and epoch % vis_intv == 0:  # save visualized intermediate result
                 with torch.no_grad():
                     steps = self.get_steps()
                 visualize(cfg, steps, epoch)
@@ -245,18 +233,22 @@ class Distiller:
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
-            task_models = self.models   # subnetworks
+            task_models = self.models  # subnetworks
+            aug_module.exploit()
 
             t0 = time.time()
             ls_train = []
             steps = self.get_steps()
             grad_infos = []
+            task_params = []    # final parameter trained by model
             for model in task_models:
                 model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
 
                 l_train, saved = self.forward(model, rdata, rlabel, steps)
                 ls_train.append(l_train.detach())
                 grad_infos.append(self.backward(model, steps, saved))
+
+                task_params.append(saved[1][-1])
                 del l_train, saved
             self.accumulate_grad(grad_infos)
 
@@ -277,6 +269,23 @@ class Distiller:
                     raise RuntimeError('loss became NaN')
 
             del steps, grad_infos, ls_train, grads
+
+            # explore augmentation strategy
+            if self.do_raug and epoch % search_intv == 0:
+                if it == 0:
+                   search_t0 = time.time()
+                for idx, model in enumerate(task_models):
+                    model.unflatten_weight(task_params[idx])
+                    p_optimizer.zero_grad()
+                    vdata, vlabel = next(iter(cfg.val_loader))
+                    vdata, vlabel = vdata.to(device), vlabel.to(device)
+                    output = model(vdata)
+                    loss = F.cross_entropy(output, vlabel)
+                    loss.backward()
+                    p_optimizer.step()
+                if it == 0:
+                    search_t = time.time() - search_t0
+                    logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))
 
             data_t0 = time.time()
 

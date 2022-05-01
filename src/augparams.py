@@ -4,9 +4,9 @@ import torch.nn as nn
 
 # Auto-Augment parameter generator
 # stack num_layers * (num_hidden, ReLU) + FC layer
-class ProjectModel(nn.Module):
-    def __init__(self, in_feature, out_feature, num_layers, num_hidden):
-        super(ProjectModel, self).__init__()
+class Projector(nn.Module):
+    def __init__(self, in_feature, out_feature, num_layers=0, num_hidden=128):
+        super(Projector, self).__init__()
         self.num_layers = num_layers
         if self.num_layers > 0:
             layers = [nn.Linear(in_feature, num_hidden), nn.ReLU()]
