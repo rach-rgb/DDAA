@@ -9,10 +9,11 @@ from sklearn.model_selection import train_test_split
 
 from config import Config
 from dataset import MessyDataset, StepDataset
-from augmentation import AugModule
 from distillation import Distiller
 from utils import save_results, load_results
+from augmentation import AugModule, autoaug_creator
 from classification import Classifier, StepClassifier
+
 
 
 def main(cfg):
@@ -66,23 +67,33 @@ def main(cfg):
 
     # train and evaluate model
     if cfg.TASK.train:
-        cls = StepClassifier(cfg)
-        if cfg.TASK.distill is True:
+        # dataloader setting
+        if cfg.TASK.distill:
+            cls = StepClassifier(cfg)
             step_dataset = StepDataset(steps)
             loader = data.DataLoader(step_dataset, 1, shuffle=True, num_workers=1, pin_memory=True)
             cfg.test_train_loader = loader
             if not cfg.TRAIN.use_full_steps:
                 steps = steps[:cfg.DISTILL.d_steps]
-            logging.info('Use distilled dataset with size: %d for training', len(steps))
-            if cfg.TRAIN.augment:
-                step_dataset.transform.transforms.insert(0, AugModule(device, cfg.TAUG))
             cls.set_step(steps)
-            cls.train_and_evaluate()
+            logging.info('Use distilled dataset with size: %d for training', len(steps))
         else:
-            cfg.test_train_loader = cfg.train_loader    # use train loader
-            if cfg.TRAIN.augment:
+            cls = Classifier(cfg)
+            cfg.test_train_loader = cfg.train_loader  # use train loader (raw data)
+        # augmentation setting
+        if cfg.TRAIN.augment:
+            if cfg.TAUG.aug_type == "Random":
                 train_dataset.transform.transforms.insert(0, AugModule(device, cfg.TAUG))
-            Classifier(cfg).train_and_evaluate()
+                cls.train_and_evaluate()
+            elif cfg.TAUG.aug_type == "Auto":
+                aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG)
+                train_dataset.transform.transforms.insert(0, aug_module)
+                cls.train_and_evaluate(autoaug=True, p_optimizer=p_optimizer)
+            else:
+                logging.exception("Not Implemented")
+                raise
+        else:
+            cls.train_and_evaluate()
 
 
 if __name__ == '__main__':

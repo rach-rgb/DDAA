@@ -6,9 +6,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from networks.nets import LeNet
-from augmentation import AugModule
-from augparams import Projector
 from classification import StepClassifier
+from augmentation import AugModule, autoaug_creator, autoaug_update
 
 # Dataset Distillation Module
 from utils import visualize
@@ -193,14 +192,7 @@ class Distiller:
             if cfg.RAUG.aug_type == 'Random':
                 aug_module = AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
-                p_module = Projector(cfg.DATA_SET.input_size, 2 * len(cfg.RAUG.aug_list))
-                p_optimizer = torch.optim.Adam(
-                    p_module.parameters(),
-                    lr=cfg.RAUG.p_lr,
-                    betas=(0.9, 0.999),
-                    weight_decay=cfg.RAUG.p_decay_factor
-                )
-                aug_module = AugModule(device, cfg.RAUG, project_module=p_module)
+                aug_module, p_optimizer = autoaug_creator(device, cfg.RAUG)
             else:
                 logging.info("Not implemented")
                 raise
@@ -276,13 +268,9 @@ class Distiller:
                    search_t0 = time.time()
                 for idx, model in enumerate(task_models):
                     model.unflatten_weight(task_params[idx])
-                    p_optimizer.zero_grad()
                     vdata, vlabel = next(iter(cfg.val_loader))
                     vdata, vlabel = vdata.to(device), vlabel.to(device)
-                    output = model(vdata)
-                    loss = F.cross_entropy(output, vlabel)
-                    loss.backward()
-                    p_optimizer.step()
+                    autoaug_update(vdata, vlabel, model, p_optimizer)
                 if it == 0:
                     search_t = time.time() - search_t0
                     logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))

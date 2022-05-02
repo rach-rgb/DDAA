@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 
 from networks.nets import LeNet
+from augmentation import autoaug_update
 
 
 # Simple classifier to evaluate dataset
@@ -71,34 +72,54 @@ class Classifier:
         return avg_loss, accuracy
 
     # train and evaluate model
-    def train_and_evaluate(self, valid=False):
-        do_evaluate = self.cfg.TASK.test
-        test_intv = 0
+    def train_and_evaluate(self, valid=False, autoaug=False, p_optimizer=None):
+        cfg = self.cfg
+
+        # model evaluation
+        do_test = cfg.TASK.test
+        test_intv = cfg.TRAIN.test_intv if do_test else self.epochs + 999
+
+        # auto-augmentation
+        do_autoaug = autoaug
+        search_intv = cfg.TAUG.search_intv if do_autoaug else self.epochs + 999
+        if do_autoaug:
+            valid = False
+            if p_optimizer is None:
+                logging.exception("No Projection Module")
+                raise
+
+        # results
         final_loss = 0
         final_accuracy = 0
         loss = 0
         accu = 0
-        train_time = 0  # train time per epoch
 
         logging.info('Start training')
-
-        if do_evaluate:
-            test_intv = self.cfg.TRAIN.test_intv
+        if do_test:
             logging.info("Evaluate model every {} epoch".format(test_intv))
 
+        train_time = 0  # train time per epoch
         for epoch in range(1, self.epochs + 1):
             t0 = time.time()
             self.train()
             train_time += (time.time() - t0)
-            if do_evaluate and (epoch % test_intv == 0):
+
+            if do_autoaug and (epoch % search_intv == 0):
+                search_t0 = time.time()
+                vdata, vlabel = next(iter(cfg.val_loader))
+                autoaug_update(vdata, vlabel, self.model, p_optimizer)
+                search_t = time.time() - search_t0
+                logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))
+
+            if do_test and (epoch % test_intv == 0):
                 loss, accu = self.test(valid)
                 logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
 
-            if (epoch == self.epochs) and do_evaluate:
+            if (epoch == self.epochs) and do_test:
                 final_loss = loss
                 final_accuracy = accu
 
-        if do_evaluate:
+        if do_test:
             if valid:
                 logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
             else:
@@ -114,24 +135,3 @@ class StepClassifier(Classifier):
 
     def set_step(self, steps):
         self.steps = steps
-
-    # def train(self):
-    #     steps = self.steps
-    #     assert steps is not None
-    #
-    #     model = self.model
-    #     optimizer = self.optimizer
-    #     scheduler = self.scheduler
-    #
-    #     model.train()
-    #     for step, (data, label, lr) in enumerate(steps):
-    #         data = data.detach()
-    #         label = label.detach()
-    #         lr = lr.detach()
-    #
-    #         optimizer.zero_grad()
-    #         output = model(data)
-    #         loss = F.cross_entropy(output, label)
-    #         loss.backward(lr.squeeze())
-    #         optimizer.step()
-    #     scheduler.step()
