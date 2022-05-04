@@ -171,6 +171,7 @@ class Distiller:
         num_subnets = cfg.DISTILL.sample_nets
         log_intv = cfg.DISTILL.log_intv
         val_model = None
+        task_models = self.models  # subnetworks
 
         # initialize validation related values
         if self.do_val:
@@ -192,7 +193,7 @@ class Distiller:
             if cfg.RAUG.aug_type == 'Random':
                 aug_module = AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
-                aug_module, p_optimizer = autoaug_creator(device, cfg.RAUG)
+                aug_module, p_optimizer = autoaug_creator(device, cfg.RAUG, task_models[0])
             else:
                 logging.info("Not implemented")
                 raise
@@ -225,7 +226,6 @@ class Distiller:
             self.optimizer.zero_grad()
             rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
 
-            task_models = self.models  # subnetworks
             aug_module.exploit()
 
             t0 = time.time()

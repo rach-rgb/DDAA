@@ -86,7 +86,7 @@ def main(cfg):
                 train_dataset.transform.transforms.insert(0, AugModule(device, cfg.TAUG))
                 cls.train_and_evaluate()
             elif cfg.TAUG.aug_type == "Auto":
-                aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG)
+                aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
                 train_dataset.transform.transforms.insert(0, aug_module)
                 cls.train_and_evaluate(autoaug=True, p_optimizer=p_optimizer)
             else:

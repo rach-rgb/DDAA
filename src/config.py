@@ -35,7 +35,7 @@ class Config(object):
                 'mean': 0.1307,
                 'std': 0.3081,  # normalization
                 'num_classes': 10,
-                'input_size': 28,
+                'feat_size': 84,
                 'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Sharpness', 'Cutout',
                              'Identity']
             }

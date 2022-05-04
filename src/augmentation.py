@@ -10,9 +10,9 @@ from operations import apply_augment
 
 
 # create and return auto-aug related modules
-def autoaug_creator(device, aug_cfg):
-    p_module = Projector(aug_cfg.input_size, 2 * len(aug_cfg.aug_list))
-    aug_module = AugModule(device, aug_cfg, project_module=p_module)
+def autoaug_creator(device, aug_cfg, cls):
+    p_module = Projector(aug_cfg.feat_size, 2 * len(aug_cfg.aug_list))
+    aug_module = AugModule(device, aug_cfg, project_module=p_module, task_model=cls)
     p_optimizer = torch.optim.Adam(
         p_module.parameters(),
         lr=aug_cfg.p_lr,
@@ -32,7 +32,7 @@ def autoaug_update(vdata, vlabel, task_model, p_optimizer):
 
 
 class AugModule(nn.Module):
-    def __init__(self, device, aug_cfg, project_module=None):
+    def __init__(self, device, aug_cfg, project_module=None, task_model=None):
         super().__init__()
         self.cfg = aug_cfg
         self.device = device
@@ -41,6 +41,7 @@ class AugModule(nn.Module):
         self.num_op = len(self.aug_list)
 
         self.projector = project_module
+        self.model = task_model
         self.__mode__ = "exploit"   # explore - train data, exploit - validation data
 
     # transformation
@@ -68,20 +69,24 @@ class AugModule(nn.Module):
         for i, op in enumerate(self.aug_list):
             aug = apply_augment(img, op, mag[i])
             mixed_aug_img.sum(torch.matmul(aug, prob[i]))
-        raise mixed_aug_img
+        return mixed_aug_img
 
     def auto_exploit(self, img):
         self.projector.eval()
         mag, prob = self.get_params(img)
+        mag, prob = mag.squeeze(), prob.squeeze()
         idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
-        raise apply_augment(img, self.aug_list[idx], mag[idx])
+        return apply_augment(img, self.aug_list[idx], mag[idx])
 
     def get_params(self, img):
-        transform = transforms.Compose([
+        tr = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((self.cfg.mean,), (self.cfg.std,))
         ])
-        params = self.projector(transform(img))
+
+        self.model.eval()
+        feature = self.model.get_feature(tr(img)[None, :])
+        params = self.projector(feature)
         prob, mag = torch.split(params, self.num_op, dim=1)
         prob = F.softmax(prob, dim=1)
         mag = torch.sigmoid(mag)
