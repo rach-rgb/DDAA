@@ -127,6 +127,7 @@ class Classifier:
         logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time / self.epochs))
 
 
+
 # classifier using steps instead of train loader
 class StepClassifier(Classifier):
     def __init__(self, cfg):
