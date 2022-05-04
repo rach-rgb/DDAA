@@ -87,13 +87,11 @@ def main(cfg):
                 aug_module = AugModule(device, cfg.TAUG)
                 train_dataset.transform.transforms.insert(0, aug_module)
                 cls.train_and_evaluate()
-                aug_module.log_history()
             elif cfg.TAUG.aug_type == "Auto":
                 logging.info("Apply Auto Augmentation")
                 aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
                 train_dataset.transform.transforms.insert(0, aug_module)
                 cls.train_and_evaluate(autoaug=True, p_optimizer=p_optimizer)
-                aug_module.log_history()
             else:
                 logging.exception("Not Implemented")
                 raise
@@ -110,6 +108,7 @@ if __name__ == '__main__':
         else:
             config_dir = sys.argv[1]
         main(Config.from_yaml(path.join('../configs/', config_dir)))
+        torch.multiprocessing.set_start_method('spawn')
     except Exception:
         logging.exception("No configuration")
         raise

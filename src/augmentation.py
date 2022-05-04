@@ -12,7 +12,7 @@ from operations import apply_augment
 
 # create and return auto-aug related modules
 def autoaug_creator(device, aug_cfg, cls):
-    p_module = Projector(aug_cfg.feat_size, 2 * len(aug_cfg.aug_list))
+    p_module = Projector(aug_cfg.feat_size, 2 * len(aug_cfg.aug_list)).to(device)
     aug_module = AugModule(device, aug_cfg, project_module=p_module, task_model=cls)
     p_optimizer = torch.optim.Adam(
         p_module.parameters(),
@@ -88,7 +88,7 @@ class AugModule(nn.Module):
         ])
 
         self.model.eval()
-        feature = self.model.get_feature(tr(img)[None, :])
+        feature = self.model.get_feature(tr(img)[None, :].to(self.device))
         params = self.projector(feature)
         prob, mag = torch.split(params, self.num_op, dim=1)
         prob = F.softmax(prob, dim=1)

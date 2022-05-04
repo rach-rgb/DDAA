@@ -75,6 +75,7 @@ class Classifier:
     # train and evaluate model
     def train_and_evaluate(self, valid=False, autoaug=False, p_optimizer=None):
         cfg = self.cfg
+        device = cfg.device
 
         # model evaluation
         do_test = cfg.TASK.test
@@ -108,6 +109,7 @@ class Classifier:
             if do_autoaug and (epoch % search_intv == 0):
                 search_t0 = time.time()
                 vdata, vlabel = next(iter(cfg.val_loader))
+                vdata, vlabel = vdata.to(device), vlabel.to(device)
                 autoaug_update(vdata, vlabel, self.model, p_optimizer)
                 search_t = time.time() - search_t0
                 logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))
@@ -126,7 +128,6 @@ class Classifier:
             else:
                 logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
         logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time / self.epochs))
-
 
 
 # classifier using steps instead of train loader
