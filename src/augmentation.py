@@ -46,17 +46,10 @@ class AugModule(nn.Module):
         self.model = task_model
         self.__mode__ = "exploit"   # explore - train data, exploit - validation data
 
-        # log augment policy
-        self.log = aug_cfg.log_hist
-        self.hist = [0] * self.num_op
-
     # transformation
     def __call__(self, img):
         if self.aug_type == 'Random':
-            op = random.randint(0, self.num_op - 1)
-            if self.log:
-                self.hist[op] = self.hist[op] + 1
-            return apply_augment(img, self.aug_list[op], random.random())
+            return apply_augment(img, random.choice(self.aug_list), random.random())
         elif self.aug_type == 'Auto':
             if self.__mode__ == "explore":
                 return self.auto_explore(img)
@@ -86,8 +79,6 @@ class AugModule(nn.Module):
         mag, prob = self.get_params(img)
         mag, prob = mag.squeeze(), prob.squeeze()
         idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
-        if self.log:
-            self.hist[idx] = self.hist[idx] + 1
         return apply_augment(img, self.aug_list[idx], mag[idx])
 
     def get_params(self, img):
@@ -103,10 +94,3 @@ class AugModule(nn.Module):
         prob = F.softmax(prob, dim=1)
         mag = torch.sigmoid(mag)
         return prob, mag
-
-    def log_history(self):
-        if self.log:
-            logging.info("Selected: Augmentation Operations")
-            for i in range (0, self.num_op):
-                logging.info("%s: %d times".format(self.aug_list[i], self.hist[i]))
-                

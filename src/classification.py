@@ -44,6 +44,7 @@ class Classifier:
             loss = F.cross_entropy(output, label)
             loss.backward()
             optimizer.step()
+            return
         scheduler.step()
 
     # evaluate trained model
