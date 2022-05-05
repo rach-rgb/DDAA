@@ -1,23 +1,20 @@
 # source: https://github.com/jamestszhim/adaptive_augment
 import torch.nn as nn
-import torch.nn.functional as F
 
 
-# Auto-Augment parameter generator
-# stack num_layers * (num_hidden, ReLU) + FC layer
+# Auto Augmentation parameter generator
 class Projector(nn.Module):
-    def __init__(self, in_feature, out_feature, num_layers=0, num_hidden=128):
+    def __init__(self, in_features, out_features, n_layers=0, n_hidden=128):
         super(Projector, self).__init__()
-
-        self.num_layers = num_layers
-        if self.num_layers > 0:
-            layers = [nn.Linear(84, num_hidden), nn.ReLU()]
-            for _ in range(self.num_layers-1):
-                layers.append(nn.Linear(num_hidden, num_hidden))
+        self.n_layers = n_layers
+        if self.n_layers > 0:
+            layers = [nn.Linear(in_features, n_hidden), nn.ReLU()]
+            for _ in range(self.n_layers-1):
+                layers.append(nn.Linear(n_hidden, n_hidden))
                 layers.append(nn.ReLU())
-            layers.append(nn.Linear(num_hidden, out_feature))
+            layers.append(nn.Linear(n_hidden, out_features))
         else:
-            layers = [nn.Linear(in_feature, out_feature)]
+            layers = [nn.Linear(in_features, out_features)]
         self.projection = nn.Sequential(*layers)
 
     def forward(self, x):

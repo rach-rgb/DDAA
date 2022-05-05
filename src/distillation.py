@@ -263,14 +263,13 @@ class Distiller:
             del steps, grad_infos, ls_train, grads
 
             # explore augmentation strategy
-            if self.do_raug and epoch % search_intv == 0:
+            if self.do_raug and epoch % search_intv == 0 and epoch != 1:
+                aug_module.explore()
                 if it == 0:
                    search_t0 = time.time()
                 for idx, model in enumerate(task_models):
                     model.unflatten_weight(task_params[idx])
-                    vdata, vlabel = next(iter(cfg.val_loader))
-                    vdata, vlabel = vdata.to(device), vlabel.to(device)
-                    autoaug_update(vdata, vlabel, model, p_optimizer)
+                    autoaug_update(device, model, p_optimizer, cfg.val_loader)
                 if it == 0:
                     search_t = time.time() - search_t0
                     logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))

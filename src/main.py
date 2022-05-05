@@ -8,12 +8,11 @@ from torchvision import datasets, transforms
 from sklearn.model_selection import train_test_split
 
 from config import Config
-from dataset import MessyDataset, StepDataset
 from distillation import Distiller
 from utils import save_results, load_results
+from dataset import MessyDataset, StepDataset
 from augmentation import AugModule, autoaug_creator
 from classification import Classifier, StepClassifier
-
 
 
 def main(cfg):
@@ -36,7 +35,13 @@ def main(cfg):
         # train set
         train_dataset = MessyDataset(cfg, clean_dataset, mess=True, index=train_idx, transform=tr_normalize)
         # validation set
-        val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx, transform=tr_normalize)
+        do_autoaug = cfg.TASK.distill and cfg.DISTILL.raw_augment and cfg.RAUG.aug_type == 'Auto'
+        do_autoaug = do_autoaug or cfg.TASK.distill and cfg.DISTILL.dd_augment and cfg.DAUG.aug_type == 'Auto'
+        do_autoaug = do_autoaug or cfg.TASK.train and cfg.TRAIN.augment and cfg.TAUG.aug_type == 'Auto'
+        if do_autoaug:  # no transformation
+            val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx)
+        else:
+            val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx, transform=tr_normalize)
         val_loader = data.DataLoader(val_dataset, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
         cfg.val_loader = val_loader
         logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, len(val_loader.dataset))
@@ -90,8 +95,9 @@ def main(cfg):
             elif cfg.TAUG.aug_type == "Auto":
                 logging.info("Apply Auto Augmentation")
                 aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
+                val_dataset.transform = aug_module
                 train_dataset.transform.transforms.insert(0, aug_module)
-                cls.train_and_evaluate(autoaug=True, p_optimizer=p_optimizer)
+                cls.train_and_evaluate(autoaug=True, aug_module=aug_module, p_optimizer=p_optimizer)
             else:
                 logging.exception("Not Implemented")
                 raise
@@ -103,12 +109,12 @@ if __name__ == '__main__':
     logging.basicConfig(filename='../output/logging.log', level=logging.INFO)
     logging.getLogger().addHandler(logging.StreamHandler())
     try:
-        if len(sys.argv) < 2:   # default
+        if len(sys.argv) < 2:  # default
             config_dir = 'default.yaml'
         else:
             config_dir = sys.argv[1]
         main(Config.from_yaml(path.join('../configs/', config_dir)))
-        torch.multiprocessing.set_start_method('spawn')
+        # torch.multiprocessing.set_start_method('spawn')
     except Exception:
         logging.exception("No configuration")
         raise

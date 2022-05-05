@@ -1,5 +1,4 @@
 import random
-import logging
 
 import torch
 import torch.nn as nn
@@ -12,7 +11,7 @@ from operations import apply_augment
 
 # create and return auto-aug related modules
 def autoaug_creator(device, aug_cfg, cls):
-    p_module = Projector(aug_cfg.feat_size, 2 * len(aug_cfg.aug_list)).to(device)
+    p_module = Projector(aug_cfg.in_features, 2 * len(aug_cfg.aug_list)).to(device)
     aug_module = AugModule(device, aug_cfg, project_module=p_module, task_model=cls)
     p_optimizer = torch.optim.Adam(
         p_module.parameters(),
@@ -24,27 +23,30 @@ def autoaug_creator(device, aug_cfg, cls):
 
 
 # update projection module
-def autoaug_update(vdata, vlabel, task_model, p_optimizer):
+def autoaug_update(device, task_model, p_optimizer, val_loader):
+    vfeat, vlabel = next(iter(val_loader))
+    vlabel = vlabel.to(device)
+
     p_optimizer.zero_grad()
-    output = task_model(vdata)
+    output = task_model.get_label(vfeat)
     loss = F.cross_entropy(output, vlabel)
     loss.backward()
     p_optimizer.step()
 
 
 class AugModule(nn.Module):
-    def __init__(self, device, aug_cfg, project_module=None, task_model=None):
+    def __init__(self, device, aug_cfg, task_model=None, project_module=None):
         super().__init__()
         self.cfg = aug_cfg
         self.device = device
         self.aug_type = aug_cfg.aug_type
         self.aug_list = aug_cfg.aug_list
-        self.num_op = len(self.aug_list)
+        self.n_ops = len(self.aug_list)
 
         # auto aug
-        self.projector = project_module
-        self.model = task_model
         self.__mode__ = "exploit"   # explore - train data, exploit - validation data
+        self.model = task_model
+        self.projector = project_module
 
     # transformation
     def __call__(self, img):
@@ -64,33 +66,40 @@ class AugModule(nn.Module):
     def exploit(self):
         self.__mode__ = "exploit"
 
-    def auto_explore(self, img):
-        self.projector.train()
-        prob, mag = self.get_params(img)
-        mag, prob = mag.squeeze(), prob.squeeze()
-        mixed_aug_img = torch.zeros_like(img)
-        for i, op in enumerate(self.aug_list):
-            aug = apply_augment(img, op, mag[i])
-            mixed_aug_img.sum(torch.matmul(aug, prob[i]))
-        return mixed_aug_img
-
+    # return augment image
     def auto_exploit(self, img):
         self.projector.eval()
-        mag, prob = self.get_params(img)
-        mag, prob = mag.squeeze(), prob.squeeze()
+        prob, mag = self.get_params(img)
         idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
         return apply_augment(img, self.aug_list[idx], mag[idx])
 
+    # return mixed augment features
+    def auto_explore(self, img):
+        tr_norm = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((self.cfg.mean,), (self.cfg.std,))
+        ])
+
+        self.projector.train()
+        prob, mag = self.get_params(img)
+        mixed_feat = torch.zeros(self.cfg.in_features)
+        for i, op in enumerate(self.aug_list):
+            aug_img = apply_augment(img, op, mag[i])
+            aug_feat = self.model.get_feature(tr_norm(aug_img)[None, :].to(self.device))
+            torch.add(mixed_feat, torch.mul(aug_feat, prob[i]))
+        return mixed_feat
+
+    # predict augmentation parameter
     def get_params(self, img):
-        tr = transforms.Compose([
+        tr_norm = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((self.cfg.mean,), (self.cfg.std,))
         ])
 
         self.model.eval()
-        feature = self.model.get_feature(tr(img)[None, :].to(self.device))
+        feature = self.model.get_feature(tr_norm(img)[None, :].to(self.device))
         params = self.projector(feature)
-        prob, mag = torch.split(params, self.num_op, dim=1)
-        prob = F.softmax(prob, dim=1)
-        mag = torch.sigmoid(mag)
+        prob, mag = torch.split(params, self.n_ops, dim=1)
+        prob = F.softmax(prob, dim=1).squeeze()
+        mag = torch.sigmoid(mag).squeeze()
         return prob, mag

@@ -73,7 +73,7 @@ class Classifier:
         return avg_loss, accuracy
 
     # train and evaluate model
-    def train_and_evaluate(self, valid=False, autoaug=False, p_optimizer=None):
+    def train_and_evaluate(self, valid=False, autoaug=False, aug_module=None, p_optimizer=None):
         cfg = self.cfg
         device = cfg.device
 
@@ -106,13 +106,14 @@ class Classifier:
             self.train()
             train_time += (time.time() - t0)
 
-            if do_autoaug and (epoch % search_intv == 0):
+            # explore augmentation strategy
+            if do_autoaug and epoch % search_intv == 0 and epoch != 1:
+                aug_module.explore()
                 search_t0 = time.time()
-                vdata, vlabel = next(iter(cfg.val_loader))
-                vdata, vlabel = vdata.to(device), vlabel.to(device)
-                autoaug_update(vdata, vlabel, self.model, p_optimizer)
+                autoaug_update(device, self.model, p_optimizer, cfg.val_loader)
                 search_t = time.time() - search_t0
                 logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))
+                aug_module.exploit()
 
             if do_test and (epoch % test_intv == 0):
                 loss, accu = self.test(valid)

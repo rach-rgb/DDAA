@@ -37,3 +37,6 @@ class LeNet(ReparamModule):
         with self.unflatten_weight(self.flat_w):
             return self.__f__(x)
 
+    def get_label(self, x):
+        with self.unflatten_weight(self.flat_w):
+            return self.__g__(x)
