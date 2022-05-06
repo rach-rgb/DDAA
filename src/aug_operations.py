@@ -35,6 +35,11 @@ def Rotate(img, v):  # [-30, 30]
     return TF.rotate(img, v)
 
 
+def AutoContrast(img, v):  # [0, 1]
+    assert 0.0 <= v <= 1.0
+    return TF.autocontrast(img)
+
+
 def Invert(img, _):
     return TF.invert(img)
 
@@ -90,6 +95,7 @@ AUGMENT_LIST = [
         (TranslateX, -0.45, 0.45),  # 2
         (TranslateY, -0.45, 0.45),  # 3
         (Rotate, -30, 30),  # 4
+        (AutoContrast, 0, 1),  # 5
         (Invert, 0, 1),  # 6
         (Equalize, 0, 1),  # 7
         (Solarize, 0, 255),  # 8
