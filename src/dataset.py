@@ -11,22 +11,27 @@ from torchvision import transforms
 class MessyDataset(data.Dataset):
     def __init__(self, cfg, dataset, mess, index=None, transform=None):
         x = dataset.data
-        y = dataset.targets
+        y = np.array(dataset.targets)
 
-        if index is not None: # subset
-            x, y = self.get_subset(x, y, index)
-        if mess is True:  # apply mess ratio for train set
+        if index is not None:  # subset
+            x, y = self.get_subset(index, x, y)
+        if mess:  # apply mess ratio for train set
             x, y = self.make_mess(cfg, x, y)
 
         self.data = x
         self.targets = y
 
         self.transform = transform
+        self.is_MNIST = cfg.DATA_SET.name == 'MNIST'
 
     def __getitem__(self, idx):
         img, target = self.data[idx], int(self.targets[idx])
 
-        img = Image.fromarray(img.numpy(), mode="L")
+        # make PIL image
+        if self.is_MNIST:
+            img = Image.fromarray(img.numpy(), mode="L")
+        else:
+            img = Image.fromarray(img)
 
         if self.transform is not None:
             img = self.transform(img)
@@ -36,7 +41,7 @@ class MessyDataset(data.Dataset):
     def __len__(self):
         return len(self.data)
 
-    def get_subset(self, x, y, index):
+    def get_subset(self, index, x, y):
         mask = np.zeros(len(y), dtype=bool)
         mask[index] = True
 

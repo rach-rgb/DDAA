@@ -6,8 +6,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 
-from networks.nets import LeNet
 from augmentation import autoaug_update
+from networks.nets import LeNet, AlexCifarNet
 
 
 # Simple classifier to evaluate dataset
@@ -24,11 +24,15 @@ class Classifier:
         cfg = self.cfg
         if cfg.TRAIN.model == 'LeNet':
             model = LeNet(cfg).to(cfg.device)
+        elif cfg.TRAIN.model == 'AlexCifarNet':
+            model = AlexCifarNet(cfg).to(cfg.device)
         else:
-            raise RuntimeError("{} Not Implemented".format(cfg.DISTILL.model))
+            logging.exception("{} Not Implemented".format(cfg.DISTILL.model))
+            raise
+        logging.info("Classifier Network: {}".format(cfg.TRAIN.model))
         return model
 
-    # train model with train_loader
+    # train model with test_train_loader
     def train(self):
         model = self.model
         device = self.cfg.device
@@ -44,21 +48,18 @@ class Classifier:
             loss = F.cross_entropy(output, label)
             loss.backward()
             optimizer.step()
-            return
         scheduler.step()
 
-    # evaluate trained model
+    # test model with test_loader
+    # use val_loader if valid=True
     def test(self, valid=False):
         model = self.model
         device = self.cfg.device
-        if valid:
-            test_loader = self.cfg.val_loader
-        else:
-            test_loader = self.cfg.test_loader
+        test_loader = self.cfg.val_loader if valid else self.cfg.test_loader
 
-        model.eval()
         avg_loss = 0
         accuracy = 0
+        model.eval()
         with torch.no_grad():
             for data, label in test_loader:
                 data, label = data.to(device), label.to(device)
@@ -72,29 +73,24 @@ class Classifier:
 
         return avg_loss, accuracy
 
-    # train and evaluate model
-    def train_and_evaluate(self, valid=False, autoaug=False, aug_module=None, p_optimizer=None):
+    # train and test model
+    def train_and_evaluate(self, valid=False, autoaug=False, modules=None):
         cfg = self.cfg
         device = cfg.device
 
         # model evaluation
-        do_test = cfg.TASK.test
-        test_intv = cfg.TRAIN.test_intv if do_test else self.epochs + 999
+        do_test = cfg.TASK.test or valid
+        test_intv = cfg.TRAIN.test_intv if cfg.TASK.test else self.epochs + 999
 
         # auto-augmentation
         do_autoaug = autoaug
         search_intv = cfg.TAUG.search_intv if do_autoaug else self.epochs + 999
         if do_autoaug:
-            valid = False
-            if p_optimizer is None:
-                logging.exception("No Projection Module")
-                raise
-
-        # results
-        final_loss = 0
-        final_accuracy = 0
-        loss = 0
-        accu = 0
+            aug_module, p_optimizer = modules
+        else:
+            aug_module = None
+            p_optimizer = None
+        assert int(do_autoaug) + int(valid) < 2
 
         logging.info('Start training')
         if do_test:
@@ -106,8 +102,8 @@ class Classifier:
             self.train()
             train_time += (time.time() - t0)
 
-            # explore augmentation strategy
-            if do_autoaug and epoch % search_intv == 0 and epoch != 1:
+            # explore auto-aug policy
+            if do_autoaug and (epoch % search_intv == 0):
                 aug_module.explore()
                 search_t0 = time.time()
                 autoaug_update(device, self.model, p_optimizer, cfg.val_loader)
@@ -119,23 +115,10 @@ class Classifier:
                 loss, accu = self.test(valid)
                 logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
 
-            if (epoch == self.epochs) and do_test:
-                final_loss = loss
-                final_accuracy = accu
-
         if do_test:
+            final_loss, final_accu = self.test(valid)
             if valid:
-                logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
+                logging.info('Validation Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accu))
             else:
-                logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accuracy))
+                logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(final_loss, final_accu))
         logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_time / self.epochs))
-
-
-# classifier using steps instead of train loader
-class StepClassifier(Classifier):
-    def __init__(self, cfg):
-        super().__init__(cfg)
-        self.steps = None
-
-    def set_step(self, steps):
-        self.steps = steps

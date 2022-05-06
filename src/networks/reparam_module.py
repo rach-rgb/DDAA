@@ -1,75 +1,32 @@
-# https://github.com/SsnL/dataset-distillation/blob/3118db69435c09a6ba46c90b696a453e00190514/networks/utils.py#L134
+# Modify https://github.com/SsnL/dataset-distillation/blob/3118db69435c09a6ba46c90b696a453e00190514/networks/utils.py#L134
 import logging
 from contextlib import contextmanager
 
 import torch
 import torch.nn as nn
-import torchvision
 from six import add_metaclass
 from torch.nn import init
 
 
-def init_weights(net, state):
-    init_type, init_param = state.init, state.init_param
-
-    if init_type == 'imagenet_pretrained':
-        assert net.__class__.__name__ == 'AlexNet'
-        state_dict = torchvision.models.alexnet(pretrained=True).state_dict()
-        state_dict['classifier.6.weight'] = torch.zeros_like(net.classifier[6].weight)
-        state_dict['classifier.6.bias'] = torch.ones_like(net.classifier[6].bias)
-        net.load_state_dict(state_dict)
-        del state_dict
-        return net
-
-    def init_func(m):
+def init_weights2(net, init_type, init_param):
+    def init_func2(m):
         classname = m.__class__.__name__
         if classname.startswith('Conv') or classname == 'Linear':
             if getattr(m, 'bias', None) is not None:
                 init.constant_(m.bias, 0.0)
             if getattr(m, 'weight', None) is not None:
-                if init_type == 'normal':
-                    init.normal_(m.weight, 0.0, init_param)
-                elif init_type == 'xavier':
+                if init_type == 'xavier':
                     init.xavier_normal_(m.weight, gain=init_param)
-                elif init_type == 'xavier_unif':
-                    init.xavier_uniform_(m.weight, gain=init_param)
-                elif init_type == 'kaiming':
-                    init.kaiming_normal_(m.weight, a=init_param, mode='fan_in')
-                elif init_type == 'kaiming_out':
-                    init.kaiming_normal_(m.weight, a=init_param, mode='fan_out')
-                elif init_type == 'orthogonal':
-                    init.orthogonal_(m.weight, gain=init_param)
-                elif init_type == 'default':
+                else:
                     if hasattr(m, 'reset_parameters'):
                         m.reset_parameters()
-                else:
-                    raise NotImplementedError('initialization method [%s] is not implemented' % init_type)
         elif 'Norm' in classname:
             if getattr(m, 'weight', None) is not None:
                 m.weight.data.fill_(1)
             if getattr(m, 'bias', None) is not None:
                 m.bias.data.zero_()
-
-    net.apply(init_func)
+    net.apply(init_func2)
     return net
-
-
-def print_network(net, verbose=False):
-    num_params = 0
-    for i, param in enumerate(net.parameters()):
-        num_params += param.numel()
-    if verbose:
-        logging.info(net)
-    logging.info('Total number of parameters: %d\n' % num_params)
-
-
-def clone_tuple(tensors, requires_grad=None):
-    return tuple(
-        t.detach().clone().requires_grad_(t.requires_grad if requires_grad is None else requires_grad) for t in tensors)
-
-##############################################################################
-# ReparamModule
-##############################################################################
 
 
 class PatchModules(type):
@@ -147,6 +104,19 @@ class ReparamModule(nn.Module):
     def __call__(self, inp):
         return self.forward_with_param(inp, self.flat_w)
 
+    def forward(self, x):
+        return self.__g__(self.__f__(x))
+
+    # return feature of input tensor x
+    def get_feature(self, x):
+        with self.unflatten_weight(self.flat_w):
+            return self.__f__(x)
+
+    # return classified label of input feature x
+    def cls_label(self, x):
+        with self.unflatten_weight(self.flat_w):
+            return self.__g__(x)
+
     # make load_state_dict work on both
     # singleton dicts containing a flattened weight tensor and
     # full dicts containing unflattened weight tensors...
@@ -159,20 +129,6 @@ class ReparamModule(nn.Module):
             super(ReparamModule, self).load_state_dict(state_dict, *args, **kwargs)
         self.register_parameter('flat_w', flat_w)
 
-    def reset(self, state, inplace=True):
-        if inplace:
-            flat_w = self.flat_w
-        else:
-            flat_w = torch.empty_like(self.flat_w).requires_grad_()
-        with torch.no_grad():
-            with self.unflatten_weight(flat_w):
-                init_weights(self, state)
-        return flat_w
-
-##############################################################################
-# methods w/o state instance
-##############################################################################
-
     # reset w/o state instance
     def reset2(self, init_type, init_param, inplace=True):
         if inplace:
@@ -183,26 +139,3 @@ class ReparamModule(nn.Module):
             with self.unflatten_weight(flat_w):
                 init_weights2(self, init_type, init_param)
         return flat_w
-
-
-# init_weights w/o state instance
-def init_weights2(net, init_type, init_param):
-    def init_func2(m):
-        classname = m.__class__.__name__
-        if classname.startswith('Conv') or classname == 'Linear':
-            if getattr(m, 'bias', None) is not None:
-                init.constant_(m.bias, 0.0)
-            if getattr(m, 'weight', None) is not None:
-                if init_type == 'xavier':
-                    init.xavier_normal_(m.weight, gain=init_param)
-                else:
-                    if hasattr(m, 'reset_parameters'):
-                        m.reset_parameters()
-        elif 'Norm' in classname:
-            if getattr(m, 'weight', None) is not None:
-                m.weight.data.fill_(1)
-            if getattr(m, 'bias', None) is not None:
-                m.bias.data.zero_()
-
-    net.apply(init_func2)
-    return net

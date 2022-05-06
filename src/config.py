@@ -1,6 +1,9 @@
+import logging
+
 import yaml
 
 
+# Configuration Instance
 class Config(object):
     def __init__(self, dict_config=None):
         super().__init__()
@@ -11,36 +14,57 @@ class Config(object):
         with open(path, 'r') as stream:
             return Config(yaml.load(stream, Loader=yaml.FullLoader))
 
-    # set information of dataset
+    # Initialize dataset information
     @staticmethod
     def init_dataset(cfg):
         if cfg.name == 'MNIST':
             dataset_info = {
-                'mean': 0.1307,
-                'std': 0.3081,  # normalization
+                'mean': (0.1307, ),
+                'std': (0.3081, ),
                 'num_classes': 10,
                 'num_channels': 1,
                 'input_size': 28,
                 'labels': ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
             }
+        elif cfg.name == 'CIFAR-10':
+            dataset_info = {
+                'mean': (0.5, 0.5, 0.5),
+                'std': (0.5, 0.5, 0.5),
+                'num_classes': 10,
+                'num_channels': 3,
+                'input_size': 32,
+                'labels': ["plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
+            }
         else:
-            raise RuntimeError("Dataset {} not implemented".format(cfg.name))
+            logging.exception("Dataset {} not implemented".format(cfg.name))
+            raise
         cfg.set_attribute(dataset_info)
 
-    # set augmentation information
+    # Initialize augmentation information
     @staticmethod
     def init_augment(cfg):
         if cfg.name == 'MNIST':
             aug_info = {
-                'mean': 0.1307,
-                'std': 0.3081,  # normalization
+                'mean': (0.1307, ),
+                'std': (0.3081, ),
                 'num_classes': 10,
+                'num_channels': 3,
                 'in_features': 84,
                 'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Sharpness', 'Cutout',
                              'Identity']
             }
+        elif cfg.name == 'CIFAR-10':
+            aug_info = {
+                'mean': (0.5, 0.5, 0.5),
+                'std': (0.5, 0.5, 0.5),
+                'num_classes': 10,
+                'num_channels': 3,
+                'in_features': 4096,
+                'aug_list': []  # TODO
+            }
         else:
-            raise RuntimeError("Dataset {} not implemented".format(cfg.name))
+            logging.exception("Augmentation for dataset {} not implemented".format(cfg.name))
+            raise
         cfg.set_attribute(aug_info)
 
     def set_attribute(self, dict_config):
