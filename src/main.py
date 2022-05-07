@@ -12,7 +12,7 @@ from distillation import Distiller
 from utils import load_results, save_results
 from classification import Classifier
 from augmentation import AugModule, autoaug_creator
-from dataset import MessyDataset, StepDataset, tr_MNIST, tr_CIFAR
+from dataset import tr_MNIST, tr_CIFAR, MessyDataset, StepDataset
 
 
 def main(cfg):
@@ -25,9 +25,11 @@ def main(cfg):
     batch_size = cfg.DATA_SET.batch_size
     num_workers = cfg.DATA_SET.num_workers
     is_MNIST = cfg.DATA_SET.name == 'MNIST'
-    do_autoaug = cfg.TASK.distill and cfg.DISTILL.raw_augment and cfg.RAUG.aug_type == 'Auto'
-    do_autoaug = do_autoaug or (cfg.TASK.distill and cfg.DISTILL.dd_augment and cfg.DAUG.aug_type) == 'Auto'
-    do_autoaug = do_autoaug or (cfg.TASK.train and cfg.TRAIN.augment and cfg.TAUG.aug_type) == 'Auto'
+
+    tr_norm = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(cfg.DATA_SET.mean, cfg.DATA_SET.std)
+    ])
 
     if is_MNIST:
         clean_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
@@ -54,9 +56,9 @@ def main(cfg):
 
     # test loader
     if is_MNIST:
-        test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr, download=True)
+        test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr_norm, download=True)
     else:   # CIFAR-10
-        test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr, download=True)
+        test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr_norm, download=True)
     cfg.test_loader = data.DataLoader(test_dataset, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     logging.info('Load test dataset: %s, size: %d', cfg.DATA_SET.name, len(test_dataset))
 
@@ -92,7 +94,7 @@ def main(cfg):
             elif cfg.TAUG.aug_type == "Auto":
                 logging.info("Apply Auto Augmentation")
                 aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
-                cfg.val_loader.dataset.transform = aug_module
+                cfg.val_loader.dataset.transform.transforms.append(aug_module)
                 cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
                 cls.train_and_evaluate(autoaug=True, modules=(aug_module, p_optimizer))
             else:
