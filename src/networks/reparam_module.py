@@ -4,8 +4,8 @@ from contextlib import contextmanager
 
 import torch
 import torch.nn as nn
-from six import add_metaclass
 from torch.nn import init
+from six import add_metaclass
 
 
 def init_weights2(net, init_type, init_param):

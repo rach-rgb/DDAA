@@ -41,27 +41,22 @@ class AlexCifarNet(ReparamModule):
         assert input_size == 32 and num_channels == 3
 
         super(AlexCifarNet, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(num_channels, 64, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
-            nn.LocalResponseNorm(4, alpha=0.001 / 9.0, beta=0.75, k=1),
-            nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(inplace=True),
-            nn.LocalResponseNorm(4, alpha=0.001 / 9.0, beta=0.75, k=1),
-            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
-        )
-        self.classifier = nn.Sequential(
-            nn.Linear(4096, 384),
-            nn.ReLU(inplace=True),
-            nn.Linear(384, 192),
-            nn.ReLU(inplace=True),
-            nn.Linear(192, num_classes),
-        )
+        self.conv1 = nn.Conv2d(num_channels, 64, kernel_size=5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=5, stride=1, padding=2)
+        self.fc1 = nn.Linear(4096, 384)
+        self.fc2 = nn.Linear(384, 192)
+        self.fc3 = nn.Linear(192, num_classes)
 
     def __f__(self, x):
-        x = self.features(x)
-        return x.view(x.size(0), 4096)
+        out = F.relu(self.conv1(x), inplace=True)
+        out = F.max_pool2d(out, kernel_size=3, stride=2, padding=1)
+        out = F.local_response_norm(out, size=4, alpha=0.001 / 9.0, beta=0.75, k=1)
+        out = F.relu(self.conv2(out), inplace=True)
+        out = F.local_response_norm(out, size=4, alpha=0.001 / 9.0, beta=0.75, k=1)
+        out = F.max_pool2d(out, kernel_size=3, stride=2, padding=1)
+        return out.view(out.size(0), 4096)
 
     def __g__(self, x):
-        return self.classifier(x)
+        out = F.relu(self.fc1(x), inplace=True)
+        out = F.relu(self.fc2(out), inplace=True)
+        return self.fc3(out)

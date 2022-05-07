@@ -99,7 +99,7 @@ class Classifier:
         train_time = 0  # train time per epoch
         for epoch in range(1, self.epochs + 1):
             t0 = time.time()
-            self.train()
+            # self.train()
             train_time += (time.time() - t0)
 
             # explore auto-aug policy

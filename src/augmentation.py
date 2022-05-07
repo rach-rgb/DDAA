@@ -3,9 +3,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import transforms
 
-import utils
 from augparams import Projector
 from aug_operations import apply_augment
 
@@ -72,35 +70,25 @@ class AugModule(nn.Module):
         self.projector.eval()
         prob, mag = self.get_params(img)
         idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
-        return apply_augment(img, self.aug_list[idx], mag[idx])
+        return apply_augment(img, self.aug_list[idx], mag[idx].item())
 
     # return mixed augment features
     def auto_explore(self, img):
-        tr_norm = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((self.cfg.mean,), (self.cfg.std,))
-        ])
-
         self.projector.train()
         prob, mag = self.get_params(img)
         mixed_feat = torch.zeros(self.cfg.in_features).to(self.device)
         for i, op in enumerate(self.aug_list):
-            aug_img = apply_augment(img, op, mag[i])
-            aug_feat = self.model.get_feature(tr_norm(aug_img)[None, :].to(self.device))
+            aug_img = apply_augment(img, op, mag[i].item())
+            aug_feat = self.model.get_feature(aug_img.unsqueeze(0)).squeeze(0)
             torch.add(mixed_feat, torch.mul(aug_feat, prob[i]))
         return mixed_feat
 
     # predict augmentation parameter
     def get_params(self, img):
-        tr_norm = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((self.cfg.mean,), (self.cfg.std,))
-        ])
-
         self.model.eval()
-        feature = self.model.get_feature(tr_norm(img)[None, :].to(self.device))
+        feature = self.model.get_feature(img.unsqueeze(0))  # make batch
         params = self.projector(feature)
         prob, mag = torch.split(params, self.n_ops, dim=1)
-        prob = F.softmax(prob, dim=1).squeeze()
-        mag = torch.sigmoid(mag).squeeze()
+        prob = F.softmax(prob, dim=1).squeeze(0)
+        mag = torch.sigmoid(mag).squeeze(0)
         return prob, mag

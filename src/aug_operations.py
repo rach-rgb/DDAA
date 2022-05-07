@@ -45,7 +45,8 @@ def Invert(img, _):
 
 
 def Equalize(img, _):
-    return TF.equalize((img * 255).type(torch.uint8))
+    aug = TF.equalize((img * 255).type(torch.uint8))
+    return aug.type(torch.FloatTensor) / 255
 
 
 def Flip(img, _):
@@ -54,13 +55,15 @@ def Flip(img, _):
 
 def Solarize(img, v):   # [0, 255]
     assert 0 <= v <= 255
-    return TF.solarize((img * 255).type(torch.uint8), v)
+    aug = TF.solarize((img * 255).type(torch.uint8), v)
+    return aug.type(torch.FloatTensor) / 255
 
 
 def Posterize(img, v):  # [4, 8]
     assert 4 <= v <= 8
     v = int(v)
-    return TF.posterize((img * 255).type(torch.uint8), v)
+    aug = TF.posterize((img * 255).type(torch.uint8), v)
+    return aug.type(torch.FloatTensor) / 255
 
 
 def Contrast(img, v):  # [0.1,1.9]

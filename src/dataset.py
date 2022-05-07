@@ -38,7 +38,6 @@ class MessyDataset(data.Dataset):
         self.targets = y
 
         self.transform = transform
-        self.is_MNIST = cfg.DATA_SET.name == 'MNIST'
 
     def __getitem__(self, idx):
         img, target = self.data[idx], int(self.targets[idx])
