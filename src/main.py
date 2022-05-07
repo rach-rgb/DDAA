@@ -10,9 +10,9 @@ from sklearn.model_selection import train_test_split
 from config import Config
 from distillation import Distiller
 from utils import load_results, save_results
-from dataset import MessyDataset, StepDataset
-from augmentation import AugModule, autoaug_creator
 from classification import Classifier
+from augmentation import AugModule, autoaug_creator
+from dataset import MessyDataset, StepDataset, tr_MNIST, tr_CIFAR
 
 
 def main(cfg):
@@ -29,30 +29,24 @@ def main(cfg):
     do_autoaug = do_autoaug or (cfg.TASK.distill and cfg.DISTILL.dd_augment and cfg.DAUG.aug_type) == 'Auto'
     do_autoaug = do_autoaug or (cfg.TASK.train and cfg.TRAIN.augment and cfg.TAUG.aug_type) == 'Auto'
 
-    tr_normalize = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(cfg.DATA_SET.mean, cfg.DATA_SET.std)
-    ])
-
     if is_MNIST:
         clean_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
+        tr = tr_MNIST
     else:   # CIFAR-10
         clean_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=True, download=True)
+        tr = tr_CIFAR
 
     if cfg.DATA_SET.train_split:
         train_idx, val_idx, _, _ = train_test_split(range(len(clean_dataset)), clean_dataset.targets,
                                                     stratify=clean_dataset.targets, test_size=cfg.DATA_SET.val_size)
         # validation loader
-        if do_autoaug:  # no transformation
-            val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx)
-        else:
-            val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx, transform=tr_normalize)
+        val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx, transform=tr)
         cfg.val_loader = data.DataLoader(val_dataset, batch_size, shuffle=True, num_workers=num_workers)
         logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, len(val_dataset))
         # train loader
-        train_dataset = MessyDataset(cfg, clean_dataset, mess=True, index=train_idx, transform=tr_normalize)
+        train_dataset = MessyDataset(cfg, clean_dataset, mess=True, index=train_idx, transform=tr)
     else:
-        train_dataset = MessyDataset(cfg, clean_dataset, mess=True, transform=tr_normalize)
+        train_dataset = MessyDataset(cfg, clean_dataset, mess=True, transform=tr)
 
     cfg.train_loader = data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     logging.info('Load train dataset: %s, size: %d, class imbalance: %.2f, label noise: %.2f',
@@ -60,9 +54,9 @@ def main(cfg):
 
     # test loader
     if is_MNIST:
-        test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr_normalize, download=True)
+        test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr, download=True)
     else:   # CIFAR-10
-        test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr_normalize, download=True)
+        test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr, download=True)
     cfg.test_loader = data.DataLoader(test_dataset, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     logging.info('Load test dataset: %s, size: %d', cfg.DATA_SET.name, len(test_dataset))
 
@@ -93,13 +87,13 @@ def main(cfg):
             if cfg.TAUG.aug_type == "Random":
                 logging.info("Apply Random Augmentation")
                 aug_module = AugModule(device, cfg.TAUG)
-                cfg.test_train_loader.dataset.transform.transforms.insert(0, aug_module)
+                cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
                 cls.train_and_evaluate()
             elif cfg.TAUG.aug_type == "Auto":
                 logging.info("Apply Auto Augmentation")
                 aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
                 cfg.val_loader.dataset.transform = aug_module
-                cfg.test_train_loader.dataset.transform.transforms.insert(0, aug_module)    # TODO: check two dataset share augmodule
+                cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
                 cls.train_and_evaluate(autoaug=True, modules=(aug_module, p_optimizer))
             else:
                 logging.exception("{} Augmentation not implemented".format(cfg.TAUG.aug_type))

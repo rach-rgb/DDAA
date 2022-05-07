@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from networks.nets import LeNet
-from classification import StepClassifier
+from classification import Classifier
 from augmentation import AugModule, autoaug_creator, autoaug_update
 
 # Dataset Distillation Module
@@ -175,7 +175,7 @@ class Distiller:
 
         # initialize validation related values
         if self.do_val:
-            val_model = StepClassifier(cfg)
+            val_model = Classifier(cfg)
             val_intv = cfg.DISTILL.val_intv
         else:
             val_intv = cfg.DISTILL.epochs + 999

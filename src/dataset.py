@@ -7,6 +7,22 @@ import torch.utils.data as data
 from torchvision import transforms
 
 
+class ToFloatTensor(object):
+    def __call__(self, img):
+        return torch.unsqueeze(img.type(torch.FloatTensor) / 255, 0)
+
+
+tr_MNIST = transforms.Compose([
+    ToFloatTensor(),
+    transforms.Normalize(0.1307, 0.3081)
+])
+
+tr_CIFAR = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
+
+
 # create messy dataset
 class MessyDataset(data.Dataset):
     def __init__(self, cfg, dataset, mess, index=None, transform=None):
@@ -26,12 +42,6 @@ class MessyDataset(data.Dataset):
 
     def __getitem__(self, idx):
         img, target = self.data[idx], int(self.targets[idx])
-
-        # make PIL image
-        if self.is_MNIST:
-            img = Image.fromarray(img.numpy(), mode="L")
-        else:
-            img = Image.fromarray(img)
 
         if self.transform is not None:
             img = self.transform(img)

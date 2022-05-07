@@ -5,8 +5,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 
+import utils
 from augparams import Projector
-from operations import apply_augment
+from aug_operations import apply_augment
 
 
 # create and return auto-aug related modules
@@ -28,7 +29,7 @@ def autoaug_update(device, task_model, p_optimizer, val_loader):
     vlabel = vlabel.to(device)
 
     p_optimizer.zero_grad()
-    output = task_model.get_label(vfeat)
+    output = task_model.cls_label(vfeat)
     loss = F.cross_entropy(output, vlabel)
     loss.backward()
     p_optimizer.step()
@@ -82,7 +83,7 @@ class AugModule(nn.Module):
 
         self.projector.train()
         prob, mag = self.get_params(img)
-        mixed_feat = torch.zeros(self.cfg.in_features)
+        mixed_feat = torch.zeros(self.cfg.in_features).to(self.device)
         for i, op in enumerate(self.aug_list):
             aug_img = apply_augment(img, op, mag[i])
             aug_feat = self.model.get_feature(tr_norm(aug_img)[None, :].to(self.device))

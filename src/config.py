@@ -50,8 +50,8 @@ class Config(object):
                 'num_classes': 10,
                 'num_channels': 3,
                 'in_features': 84,
-                'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Sharpness', 'Cutout',
-                             'Identity']
+                'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate',
+                             'Brightness', 'Sharpness', 'Identity']
             }
         elif cfg.name == 'CIFAR-10':
             aug_info = {
@@ -60,7 +60,9 @@ class Config(object):
                 'num_classes': 10,
                 'num_channels': 3,
                 'in_features': 4096,
-                'aug_list': []  # TODO
+                'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate',
+                             'AutoContrast', 'Invert', 'Equalize', 'Solarize', 'Posterize', 'Contrast',
+                             'Color', 'Brightness', 'Sharpness', 'Flip', 'Identity']
             }
         else:
             logging.exception("Augmentation for dataset {} not implemented".format(cfg.name))

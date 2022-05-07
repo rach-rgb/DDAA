@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 import numpy as np
+from PIL import Image
 
 import matplotlib
 matplotlib.use('agg')
@@ -127,3 +128,34 @@ def _vis_results_fn(np_steps, img_per_class, dataset_info,
             fig, axes = plt.subplots(nrows=grid[0], ncols=grid[1])
             axes = axes.flatten()
             plt.show()()
+
+
+def tensor_to_pil(x):
+    n_channels = int(x.shape[0])
+    np_x = x.detach().permute(1, 2, 0).numpy()
+    np_x = (np_x * 255).astype(np.uint8)
+    if n_channels == 1:
+        im_x = Image.fromarray(np.squeeze(np_x, axis=2), mode='L')
+    else:
+        im_x = Image.fromarray(np_x)
+    return im_x
+
+
+def concat_row(img_list):
+    w, h = zip(*(i.size for i in img_list))
+    result = Image.new('RGB', (sum(w), max(h)))
+    off = 0
+    for im in img_list:
+        result.paste(im, (off, 0))
+        off += im.size[0]
+    return result
+
+
+def concat_col(img_list):
+    w, h = zip(*(i.size for i in img_list))
+    result = Image.new('RGB', (max(w), sum(h)))
+    off = 0
+    for im in img_list:
+        result.paste(im, (0, off))
+        off += im.size[1]
+    return result
