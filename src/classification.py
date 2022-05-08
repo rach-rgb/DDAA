@@ -99,17 +99,15 @@ class Classifier:
         train_time = 0  # train time per epoch
         for epoch in range(1, self.epochs + 1):
             t0 = time.time()
-            # self.train()
+            self.train()
             train_time += (time.time() - t0)
 
             # explore auto-aug policy
             if do_autoaug and (epoch % search_intv == 0):
-                aug_module.explore()
                 search_t0 = time.time()
-                autoaug_update(device, self.model, p_optimizer, cfg.val_loader)
+                autoaug_update(device, self.model, aug_module, p_optimizer, cfg.val_loader)
                 search_t = time.time() - search_t0
                 logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))
-                aug_module.exploit()
 
             if do_test and (epoch % test_intv == 0):
                 loss, accu = self.test(valid)

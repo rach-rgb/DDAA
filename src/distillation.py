@@ -9,10 +9,10 @@ from networks.nets import LeNet
 from classification import Classifier
 from augmentation import AugModule, autoaug_creator, autoaug_update
 
-# Dataset Distillation Module
 from utils import visualize
 
 
+# Dataset Distillation Module
 class Distiller:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -213,10 +213,8 @@ class Distiller:
 
             if self.do_val and it == 0 and epoch % val_intv == 0:  # validation
                 logging.info('Begin of epoch {} validation result'.format(epoch))
-                with torch.no_grad():
-                    steps = self.get_steps()
-                val_model.set_step(steps)
-                val_model.train_and_evaluate(valid=True)
+                # TODO: set model parameters
+                # val_model.train_and_evaluate(valid=True)
 
             if self.do_vis and it == 0 and epoch % vis_intv == 0:  # save visualized intermediate result
                 with torch.no_grad():
@@ -264,12 +262,11 @@ class Distiller:
 
             # explore augmentation strategy
             if self.do_raug and epoch % search_intv == 0 and epoch != 1:
-                aug_module.explore()
                 if it == 0:
                    search_t0 = time.time()
                 for idx, model in enumerate(task_models):
                     model.unflatten_weight(task_params[idx])
-                    autoaug_update(device, model, p_optimizer, cfg.val_loader)
+                    autoaug_update(device, model, aug_module, p_optimizer, cfg.val_loader)
                 if it == 0:
                     search_t = time.time() - search_t0
                     logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))

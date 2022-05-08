@@ -22,15 +22,21 @@ def autoaug_creator(device, aug_cfg, cls):
 
 
 # update projection module
-def autoaug_update(device, task_model, p_optimizer, val_loader):
-    vfeat, vlabel = next(iter(val_loader))
-    vlabel = vlabel.to(device)
+def autoaug_update(device, task_model, aug_module, p_optimizer, val_loader):
+    vdata, vlabel = next(iter(val_loader))
+    vdata, vlabel = vdata.to(device), vlabel.to(device)
+
+    task_model.eval()
+    aug_module.explore()
 
     p_optimizer.zero_grad()
+    vfeat = aug_module.auto_explore(vdata)
     output = task_model.cls_label(vfeat)
     loss = F.cross_entropy(output, vlabel)
     loss.backward()
     p_optimizer.step()
+
+    aug_module.exploit()
 
 
 class AugModule(nn.Module):
@@ -55,7 +61,7 @@ class AugModule(nn.Module):
             if self.__mode__ == "explore":
                 return self.auto_explore(img)
             elif self.__mode__ == "exploit":
-                return self.auto_exploit(img)
+                return img  # perform exploration manually
 
     # switch mode to explore
     def explore(self):
@@ -68,20 +74,22 @@ class AugModule(nn.Module):
     # return augment image
     def auto_exploit(self, img):
         self.projector.eval()
-        prob, mag = self.get_params(img)
+        prob, mag = self.get_params(img.to(self.device))
         idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
         return apply_augment(img, self.aug_list[idx], mag[idx].item())
 
     # return mixed augment features
-    def auto_explore(self, img):
+    def auto_explore(self, imgs):
         self.projector.train()
-        prob, mag = self.get_params(img)
-        mixed_feat = torch.zeros(self.cfg.in_features).to(self.device)
-        for i, op in enumerate(self.aug_list):
-            aug_img = apply_augment(img, op, mag[i].item())
-            aug_feat = self.model.get_feature(aug_img.unsqueeze(0)).squeeze(0)
-            torch.add(mixed_feat, torch.mul(aug_feat, prob[i]))
-        return mixed_feat
+        mixed_feats = []
+        for img in imgs:
+            prob, mag = self.get_params(img)
+            aug_imgs = []
+            for i, op in enumerate(self.aug_list):
+                aug_imgs.append(apply_augment(img, op, mag[i].item()))
+            aug_feats = self.model.get_feature(torch.stack(aug_imgs, dim=0))
+            mixed_feats.append(torch.matmul(prob, aug_feats))
+        return torch.stack(mixed_feats, dim=0)
 
     # predict augmentation parameter
     def get_params(self, img):

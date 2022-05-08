@@ -89,12 +89,12 @@ def main(cfg):
             if cfg.TAUG.aug_type == "Random":
                 logging.info("Apply Random Augmentation")
                 aug_module = AugModule(device, cfg.TAUG)
-                tr_norm.append(aug_module)
+                cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
                 cls.train_and_evaluate()
             elif cfg.TAUG.aug_type == "Auto":
                 logging.info("Apply Auto Augmentation")
                 aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
-                tr_norm.append(aug_module)
+                cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
                 cls.train_and_evaluate(autoaug=True, modules=(aug_module, p_optimizer))
             else:
                 logging.exception("{} Augmentation not implemented".format(cfg.TAUG.aug_type))
