@@ -26,15 +26,14 @@ def autoaug_update(device, task_model, aug_module, p_optimizer, val_loader):
     vdata, vlabel = next(iter(val_loader))
     vdata, vlabel = vdata.to(device), vlabel.to(device)
 
-    task_model.eval()
     aug_module.explore()
-
     p_optimizer.zero_grad()
     vfeat = aug_module.auto_explore(vdata)
     output = task_model.cls_label(vfeat)
     loss = F.cross_entropy(output, vlabel)
     loss.backward()
     p_optimizer.step()
+    del vfeat, output, loss
 
     aug_module.exploit()
 
@@ -59,9 +58,9 @@ class AugModule(nn.Module):
             return apply_augment(img, random.choice(self.aug_list), random.random())
         elif self.aug_type == 'Auto':
             if self.__mode__ == "explore":
-                return self.auto_explore(img)
-            elif self.__mode__ == "exploit":
                 return img  # perform exploration manually
+            elif self.__mode__ == "exploit":
+                return self.auto_exploit(img)
 
     # switch mode to explore
     def explore(self):
@@ -74,9 +73,10 @@ class AugModule(nn.Module):
     # return augment image
     def auto_exploit(self, img):
         self.projector.eval()
-        prob, mag = self.get_params(img.to(self.device))
-        idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
-        return apply_augment(img, self.aug_list[idx], mag[idx].item())
+        with torch.no_grad():
+            prob, mag = self.get_params(img.to(self.device))
+            idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
+            return apply_augment(img, self.aug_list[idx], mag[idx].item())
 
     # return mixed augment features
     def auto_explore(self, imgs):
