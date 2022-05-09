@@ -130,6 +130,19 @@ def _vis_results_fn(np_steps, img_per_class, dataset_info,
             plt.show()()
 
 
+# Args: steps(list): list of distilled images, labels and lrs
+# Returns: images(tensor list), labels(int list)
+def step_to_tensor(steps):
+    x = []
+    y = []
+    for data, labels, lr in steps:
+        for img, label in zip(data, labels):
+            x.append(img)
+            y.append(label)
+    return x, np.array(y)
+
+
+# PIL Image Methods
 def tensor_to_pil(x):
     n_channels = int(x.shape[0])
     np_x = x.detach().permute(1, 2, 0).numpy()

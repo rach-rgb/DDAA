@@ -2,9 +2,10 @@ import logging
 
 import torch
 import numpy as np
-from PIL import Image
 import torch.utils.data as data
 from torchvision import transforms
+
+from utils import step_to_tensor
 
 
 class ToFloatTensor(object):
@@ -29,8 +30,14 @@ class MessyDataset(data.Dataset):
         x = dataset.data
         y = np.array(dataset.targets)
 
-        if index is not None:  # subset
+        # get subset
+        if index is not None:
             x, y = self.get_subset(index, x, y)
+
+        # class distribution
+        self.n_classes = cfg.DATA_SET.num_classes
+        self.n_per_classes = [int(len(x) / self.n_classes)] * self.n_classes
+
         if mess:  # apply mess ratio for train set
             x, y = self.make_mess(cfg, x, y)
 
@@ -54,10 +61,7 @@ class MessyDataset(data.Dataset):
         mask = np.zeros(len(y), dtype=bool)
         mask[index] = True
 
-        x = x[mask]
-        y = y[mask]
-
-        return x, y
+        return x[mask], y[mask]
 
     def make_mess(self, cfg, x, y):
         imbalance_r = cfg.DATA_SET.imbalance
@@ -77,6 +81,7 @@ class MessyDataset(data.Dataset):
             ny = y.numpy()
             for label in small_label:
                 remove_idx = remove_idx + list(np.where(ny == label)[0][:large_size - small_size])
+                self.n_per_classes[label] = small_size
 
             mask = np.ones(len(y), dtype=bool)
             mask[remove_idx] = False
@@ -95,18 +100,13 @@ class MessyDataset(data.Dataset):
 
 # Create Dataset from steps
 class StepDataset(data.Dataset):
-    def __init__(self, steps):
-        self.data, self.targets = self.convert(steps)
+    def __init__(self, n_classes, steps):
+        self.data, self.targets = step_to_tensor(steps)
         self.transform = transforms.Compose([])     # empty
 
-    def convert(self, steps):
-        x = []
-        y = []
-        for data, labels, lr in steps:
-            for img, label in zip(data, labels):
-                x.append(img)
-                y.append(label)
-        return x, np.array(y)
+        # class distribution
+        self.n_classes = n_classes
+        self.n_per_classes = [int(len(self.data) / n_classes)] * n_classes
 
     def __getitem__(self, idx):
         img, target = self.data[idx], int(self.targets[idx])

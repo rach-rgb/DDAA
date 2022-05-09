@@ -5,7 +5,8 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-from networks.nets import LeNet
+from loss_model import get_loss
+from networks.nets import LeNet, AlexCifarNet
 from augmentation import AugModule, autoaug_creator, autoaug_update
 
 from utils import visualize
@@ -38,12 +39,23 @@ class Distiller:
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=cfg.DISTILL.decay_epochs,
                                                    gamma=cfg.DISTILL.decay_factor)
 
+        # focal loss parameters
+        if cfg.DISTILL.rloss_crit == 'BF':
+            self.info = (cfg.train_loader.n_classes, cfg.train_loader.n_per_classes)
+        else:
+            self.info = None
+        assert cfg.DISTILL.dloss_crit == 'CE'
+
     # init models
     def init_models(self):
         cfg = self.cfg
         if cfg.DISTILL.model == 'LeNet':
-            for m in range(0, cfg.DISTILL.sample_nets):
+            for m in range(cfg.DISTILL.sample_nets):
                 task_model = LeNet(cfg).to(cfg.device)
+                self.models.append(task_model)
+        elif cfg.DISTILL.model == 'AlexCifarNet':
+            for m in range(cfg.DISTILL.sample_nets):
+                task_model = AlexCifarNet(cfg).to(cfg.device)
                 self.models.append(task_model)
         else:
             logging.error("{} Not Implemented".format(cfg.DISTILL.model))
@@ -102,6 +114,8 @@ class Distiller:
 
     # train task model using distilled data
     def forward(self, model, rdata, rlabel, steps):
+        raw_loss_crit = self.cfg.rloss_crit
+
         # forward distilled dataset
         model.train()
         w = model.get_param()
@@ -123,7 +137,7 @@ class Distiller:
         # calculate loss using train data
         model.eval()
         output = model.forward_with_param(rdata, params[-1])
-        tloss = F.cross_entropy(output, rlabel)
+        tloss = get_loss(output, rlabel, raw_loss_crit, params=self.info)
         return tloss, (tloss, params, gws)
 
     # update distilled data and lr
@@ -173,7 +187,7 @@ class Distiller:
         task_params = [0] * n_subnets  # recent parameters of task_models
 
         max_it = len(cfg.train_loader) - 1
-        unreach_ep = cfg.DISTILL.epochs
+        unreach_ep = cfg.DISTILL.epochs + 1
 
         # additional features
         log_intv = cfg.DISTILL.log_intv
