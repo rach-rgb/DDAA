@@ -36,8 +36,8 @@ class Config(object):
                 'labels': ["plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
             }
         else:
-            logging.exception("Dataset {} not implemented".format(cfg.name))
-            raise
+            logging.error("Dataset {} not implemented".format(cfg.name))
+            raise NotImplementedError
         cfg.set_attribute(dataset_info)
 
     # Initialize augmentation information
@@ -65,8 +65,8 @@ class Config(object):
                              'Color', 'Brightness', 'Sharpness', 'Flip', 'Identity']
             }
         else:
-            logging.exception("Augmentation for dataset {} not implemented".format(cfg.name))
-            raise
+            logging.error("Augmentation for dataset {} not implemented".format(cfg.name))
+            raise NotImplementedError
         cfg.set_attribute(aug_info)
 
     def set_attribute(self, dict_config):

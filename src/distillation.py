@@ -6,7 +6,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from networks.nets import LeNet
-from classification import Classifier
 from augmentation import AugModule, autoaug_creator, autoaug_update
 
 from utils import visualize
@@ -47,7 +46,8 @@ class Distiller:
                 task_model = LeNet(cfg).to(cfg.device)
                 self.models.append(task_model)
         else:
-            raise RuntimeError("{} Not Implemented".format(cfg.DISTILL.model))
+            logging.error("{} Not Implemented".format(cfg.DISTILL.model))
+            raise NotImplementedError
 
     # initialize label, distilled data and learning rate
     def init_data(self):
@@ -168,117 +168,139 @@ class Distiller:
 
         cfg = self.cfg
         device = cfg.device
-        num_subnets = cfg.DISTILL.sample_nets
+        task_models = self.models  # classifiers
+        n_subnets = len(task_models)
+        task_params = [0] * n_subnets  # recent parameters of task_models
+
+        max_it = len(cfg.train_loader) - 1
+        unreach_ep = cfg.DISTILL.epochs
+
+        # additional features
         log_intv = cfg.DISTILL.log_intv
-        val_model = None
-        task_models = self.models  # subnetworks
+        vis_intv = cfg.DISTILL.vis_intv if self.do_vis else unreach_ep
+        val_intv = cfg.DISTILL.val_intv if self.do_val else unreach_ep
 
-        # initialize validation related values
-        if self.do_val:
-            val_model = Classifier(cfg)
-            val_intv = cfg.DISTILL.val_intv
-        else:
-            val_intv = cfg.DISTILL.epochs + 999
-
-        if self.do_vis:
-            vis_intv = cfg.DISTILL.vis_intv
-        else:
-            vis_intv = cfg.DISTILL.epochs + 999
-
-        # initialize augmentation related models
-        p_optimizer = None
+        # augmentation
         aug_module = None
-        search_intv = cfg.DISTILL.epochs + 999
+        p_optimizer = None
+        exp_intv = unreach_ep
         if self.do_raug:
             if cfg.RAUG.aug_type == 'Random':
                 aug_module = AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
+                assert not self.do_vis
+                # TODO: decouple task_model, aug_module, p_optimizer
                 aug_module, p_optimizer = autoaug_creator(device, cfg.RAUG, task_models[0])
+                exp_intv = cfg.RAUG.search_intv
             else:
-                logging.info("Not implemented")
-                raise
-            cfg.train_loader.dataset.transform.transforms.insert(0, aug_module)
+                logging.error("{} Augmentation for raw data not implemented".format(cfg.RAUG.aug_type))
+                raise NotImplementedError
+            cfg.train_loader.dataset.transform.transforms.append(aug_module)
 
         if self.do_daug:
-            logging.exception("Not implemented")
-            raise
+            logging.error("Augmentation for distilled data during distillation not implemented")
+            raise NotImplementedError
 
         data_t0 = time.time()
-
         for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
+            rdata, rlabel = rdata.to(device), rlabel.to(device)
             data_t = time.time() - data_t0  # data load time
 
-            if it == 0 and not epoch == 0:
+            if it == 0 and epoch != 0:
                 self.scheduler.step()
 
-            if self.do_val and it == 0 and epoch % val_intv == 0:  # validation
-                logging.info('Begin of epoch {} validation result'.format(epoch))
-                # TODO: set model parameters
-                # val_model.train_and_evaluate(valid=True)
+            # explore auto-aug strategy
+            if self.do_raug and epoch % exp_intv == 0 and it == 0 and epoch != 0:
+                ex_t0 = time.time()
+                for idx, model in enumerate(task_models):
+                    model.unflatten_weight(task_params[idx])
+                    autoaug_update(device, model, aug_module, p_optimizer, cfg.val_loader)
+                ex_t = time.time() - ex_t0
+                logging.info('Epoch: {:4d}, Iteration: {:4d}, Search time: {:.2f}'.format(epoch, it, ex_t))
 
-            if self.do_vis and it == 0 and epoch % vis_intv == 0:  # save visualized intermediate result
-                with torch.no_grad():
-                    steps = self.get_steps()
-                visualize(cfg, steps, epoch)
+            train_t0 = time.time()
 
-            self.optimizer.zero_grad()
-            rdata, rlabel = rdata.to(device, non_blocking=True), rlabel.to(device, non_blocking=True)
-
-            aug_module.exploit()
-
-            t0 = time.time()
-            ls_train = []
-            steps = self.get_steps()
+            rlosses = []
             grad_infos = []
-            task_params = []    # final parameter trained by model
-            for model in task_models:
+            steps = self.get_steps()
+            self.optimizer.zero_grad()
+            for mid, model in enumerate(task_models):
                 model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
 
-                l_train, saved = self.forward(model, rdata, rlabel, steps)
-                ls_train.append(l_train.detach())
+                rloss, saved = self.forward(model, rdata, rlabel, steps)
+                rlosses.append(rloss.detach())
                 grad_infos.append(self.backward(model, steps, saved))
 
-                task_params.append(saved[1][-1])
-                del l_train, saved
+                task_params[mid] = saved[1][-1]
+                del rloss, saved
             self.accumulate_grad(grad_infos)
 
             # average gradient
             grads = [p.grad for p in self.params]
             for g in grads:
-                g.div_(num_subnets)
-
+                g.div_(n_subnets)
             self.optimizer.step()
-            t = time.time() - t0  # train time
 
-            if it == 0 and epoch % log_intv == 0:
-                ls_train = torch.stack(ls_train, 0).sum().item() / num_subnets
-                logging.info('Epoch: {:4d}, Train Loss: {:.4f}, '
-                             'Data time: {:.2f}, Train time: {:.2f}'
-                             .format(epoch, ls_train, data_t, t))
-                if ls_train != ls_train:
-                    raise RuntimeError('loss became NaN')
+            train_t = time.time() - train_t0  # train time
 
-            del steps, grad_infos, ls_train, grads
+            if it == max_it and epoch % log_intv == 0:
+                rlosses = torch.stack(rlosses, 0).sum().item() / n_subnets
+                logging.info('Epoch: {:4d}, Iteration: {:4d}, Train Loss: {:.4f}, Data time: {:.2f}, Train time: {:.2f}'
+                             .format(epoch, it, rlosses, data_t, train_t))
+                if rlosses != rlosses:
+                    logging.error("loss became NAN")
+                    raise
 
-            # explore augmentation strategy
-            if self.do_raug and epoch % search_intv == 0 and epoch != 1:
-                if it == 0:
-                   search_t0 = time.time()
-                for idx, model in enumerate(task_models):
-                    model.unflatten_weight(task_params[idx])
-                    autoaug_update(device, model, aug_module, p_optimizer, cfg.val_loader)
-                if it == 0:
-                    search_t = time.time() - search_t0
-                    logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, search_t))
+            del steps, rlosses, grad_infos, grads
+
+            # save visualized intermediate result
+            if self.do_vis and epoch % vis_intv == 0 and it == max_it and epoch != 0:
+                logging.info("Epoch: {:4d}: save visualized result".format(epoch))
+                with torch.no_grad():
+                    steps = self.get_steps()
+                    visualize(cfg, steps, epoch)
+
+            # validation
+            if self.do_val and epoch % val_intv == 0 and it == max_it and epoch != 0:
+                logging.info('Epoch: {:4d}: validation'.format(epoch))
+                avg_loss = 0
+                avg_accu = 0
+                with torch.no_grad():
+                    for w, m in zip(task_params, task_models):
+                        m.unflatten_weight(w)
+                        l, a = self.validate(device, m, cfg.val_loader)
+                        avg_loss += l
+                        avg_accu += avg_accu
+                    avg_loss = l / n_subnets
+                    avg_accu = avg_accu / n_subnets
+                    logging.info("Average loss: {:.4f}, average accuracy: {:.0f}".format(avg_loss, avg_accu))
 
             data_t0 = time.time()
-
+            # end of for loop
         logging.info('Distillation finished')
 
-        # return results
         with torch.no_grad():
             steps = self.get_steps()
         return steps
+
+    # validation
+    def validate(self, device, model, dataloader):
+        avg_loss = 0
+        accuracy = 0
+        model.eval()
+
+        with torch.no_grad():
+            for data, label in dataloader:
+                data, label = data.to(device), label.to(device)
+                output = model(data)
+                avg_loss += F.cross_entropy(output, label, reduction='sum').item()
+                pred = output.argmax(dim=1, keepdim=True)
+                accuracy += pred.eq(label.view_as(pred)).sum().item()
+
+        avg_loss /= len(dataloader.dataset)
+        accuracy = accuracy * 100. / len(dataloader.dataset)
+
+        return avg_loss, accuracy
 
     # get epoch, iteration and data from train_loader
     def prefetch_train_loader_iter(self):

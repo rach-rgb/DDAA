@@ -1,9 +1,15 @@
-# augment tensor type images directly
+# source: https://github.com/jamestszhim/adaptive_augment
+# reimplement augmentation operation with tensor input
 import torch
 from torchvision import transforms
 import torchvision.transforms.functional as TF
 
-random_mirror = True  # flip magnitude by 1/2 probability
+
+# Args: img(tensor), name(str): operation name, level(float): operation magnitude in range [0, 1]
+# Returns: augmented image(tensor)
+def apply_augment(img, name, level):
+    augment_fn, low, high = get_augment(name)
+    return augment_fn(img, level * (high - low) + low)
 
 
 def ShearX(img, v):     # [-0.2, 0.2]
@@ -90,8 +96,6 @@ def Identity(img, _):
     return img
 
 
-
-
 AUGMENT_LIST = [
         (ShearX, -0.2, 0.2),  # 0
         (ShearY, -0.2, 0.2),  # 1
@@ -112,13 +116,10 @@ AUGMENT_LIST = [
         ]
 
 
-# return dictionary of augmentation operation
+# returns selected augmentation function
 def get_augment(name):
     augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in AUGMENT_LIST}
     return augment_dict[name]
 
 
-# parameters: img(Tensor image), name(operation name), level(magnitude 0~1)
-def apply_augment(img, name, level):
-    augment_fn, low, high = get_augment(name)
-    return augment_fn(img, level * (high - low) + low)
+

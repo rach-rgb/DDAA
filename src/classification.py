@@ -27,8 +27,8 @@ class Classifier:
         elif cfg.TRAIN.model == 'AlexCifarNet':
             model = AlexCifarNet(cfg).to(cfg.device)
         else:
-            logging.exception("{} Not Implemented".format(cfg.DISTILL.model))
-            raise
+            logging.error("Model {} not implemented".format(cfg.DISTILL.model))
+            raise NotImplementedError
         logging.info("Classifier Network: {}".format(cfg.TRAIN.model))
         return model
 

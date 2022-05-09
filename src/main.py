@@ -9,8 +9,8 @@ from sklearn.model_selection import train_test_split
 
 from config import Config
 from distillation import Distiller
-from utils import load_results, save_results
 from classification import Classifier
+from utils import load_results, save_results
 from augmentation import AugModule, autoaug_creator
 from dataset import tr_MNIST, tr_CIFAR, MessyDataset, StepDataset
 
@@ -97,8 +97,8 @@ def main(cfg):
                 cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
                 cls.train_and_evaluate(autoaug=True, modules=(aug_module, p_optimizer))
             else:
-                logging.exception("{} Augmentation not implemented".format(cfg.TAUG.aug_type))
-                raise
+                logging.error("Augmentation {} not implemented".format(cfg.TAUG.aug_type))
+                raise NotImplementedError
         else:
             cls.train_and_evaluate()
 
@@ -115,4 +115,3 @@ if __name__ == '__main__':
         main(Config.from_yaml(path.join('../configs/', config_dir)))
     except Exception:
         logging.exception("Terminate by error")
-        raise
