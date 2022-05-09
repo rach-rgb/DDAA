@@ -86,7 +86,7 @@ class AugModule(nn.Module):
             prob, mag = self.get_params(img)
             aug_imgs = []
             for i, op in enumerate(self.aug_list):
-                aug_imgs.append(apply_augment(img, op, mag[i].item()))
+                aug_imgs.append(apply_augment(img, op, mag[i].item()).to(self.device))
             aug_feats = self.model.get_feature(torch.stack(aug_imgs, dim=0))
             mixed_feats.append(torch.matmul(prob, aug_feats))
         return torch.stack(mixed_feats, dim=0)
