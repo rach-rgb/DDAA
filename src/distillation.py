@@ -41,7 +41,8 @@ class Distiller:
 
         # focal loss parameters
         if cfg.DISTILL.rloss_crit == 'BF':
-            self.info = (cfg.train_loader.n_classes, cfg.train_loader.n_per_classes)
+            self.info = (cfg.device, cfg.train_loader.n_classes, cfg.train_loader.n_per_classes)
+            logging.info("Distillation Raw Data Loss: Class Balanced Focal Loss")
         else:
             self.info = None
         assert cfg.DISTILL.dloss_crit == 'CE'

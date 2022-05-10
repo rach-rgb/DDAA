@@ -9,18 +9,18 @@ import torch.nn.functional as F
 # Args: output(tensor): model output, label(tensor): target, ty(str): type of loss
 # reduction(str): F.cross_entropy reduction method, params(tuple): parameter for class balanced focal loss
 # Returns: calculated loss
-def get_loss(output, label, ty, reduction='none', params=None):
+def get_loss(output, label, ty, reduction='mean', params=None):
     if ty == 'CE':  # cross entropy
         return F.cross_entropy(output, label, reduction=reduction)
-    elif ty == 'BF':    # class balanced focal loss
-        n_classes, n_per_classes = params
-        return CB_loss(output, label, n_classes, n_per_classes)
+    elif ty == 'BF':  # class balanced focal loss
+        device, n_classes, n_per_classes = params
+        return CB_loss(output, label, device, n_classes, n_per_classes)
     else:
         logging.error("Loss Model {} not implemented".format(ty))
         raise NotImplementedError
 
 
-def CB_loss(logits, labels, n_classes, n_per_classes, beta=0.9999, gamma=2.0):
+def CB_loss(logits, labels, device, n_classes, n_per_classes, beta=0.9999, gamma=2.0):
     """Compute the Class Balanced Loss between `logits` and the ground truth `labels`.
     Class Balanced Loss: ((1-beta)/(1-beta^n))*Loss(labels, logits)
     where Loss is one of the standard losses used for Neural Networks.
@@ -41,7 +41,7 @@ def CB_loss(logits, labels, n_classes, n_per_classes, beta=0.9999, gamma=2.0):
 
     labels_one_hot = F.one_hot(labels, n_classes).float()
 
-    weights = (torch.tensor(weights).float()).unsqueeze(0)
+    weights = (torch.tensor(weights).float()).unsqueeze(0).to(device)
     weights = weights.repeat(labels_one_hot.shape[0], 1) * labels_one_hot
     weights = weights.sum(1).unsqueeze(1)
     alpha = weights.repeat(1, n_classes)
@@ -52,7 +52,7 @@ def CB_loss(logits, labels, n_classes, n_per_classes, beta=0.9999, gamma=2.0):
         modulator = 1.0
     else:
         modulator = torch.exp(-gamma * labels_one_hot * logits - gamma * torch.log(1 +
-                                                                           torch.exp(-1.0 * logits)))
+                                                                                   torch.exp(-1.0 * logits)))
     loss = modulator * BCLoss
 
     weighted_loss = alpha * loss

@@ -28,7 +28,9 @@ tr_CIFAR = transforms.Compose([
 class MessyDataset(data.Dataset):
     def __init__(self, cfg, dataset, mess, index=None, transform=None):
         x = dataset.data
-        y = np.array(dataset.targets)
+        y = dataset.targets
+        if isinstance(y, list):
+            y = torch.tensor(y)
 
         # get subset
         if index is not None:
@@ -41,8 +43,8 @@ class MessyDataset(data.Dataset):
         if mess:  # apply mess ratio for train set
             x, y = self.make_mess(cfg, x, y)
 
-        self.data = x
-        self.targets = y
+        self.data = x       # Tensor [num_of_data, (C), H, W]
+        self.targets = y    # Tensor [num_of_data]
 
         self.transform = transform
 
@@ -102,7 +104,10 @@ class MessyDataset(data.Dataset):
 class StepDataset(data.Dataset):
     def __init__(self, n_classes, steps):
         self.data, self.targets = step_to_tensor(steps)
-        self.transform = transforms.Compose([])     # empty
+        self.data = torch.stack(self.data, dim=0)      # Tensor [num_of_data, C, W, H]
+        self.targets = torch.tensor(self.targets)      # Tensor [num_of_data]
+
+        self.transform = transforms.Compose([])             # empty
 
         # class distribution
         self.n_classes = n_classes

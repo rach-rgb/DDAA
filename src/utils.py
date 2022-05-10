@@ -138,8 +138,8 @@ def step_to_tensor(steps):
     for data, labels, lr in steps:
         for img, label in zip(data, labels):
             x.append(img)
-            y.append(label)
-    return x, np.array(y)
+            y.append(label.item())
+    return x, y
 
 
 # PIL Image Methods

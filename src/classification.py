@@ -3,6 +3,7 @@ import logging
 
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 
 from loss_model import get_loss
@@ -22,7 +23,8 @@ class Classifier:
 
         # focal loss parameters
         if cfg.TRAIN.tloss_crit == 'BF':
-            self.info = (cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
+            logging.info("Classification Loss: Class Balanced Focal Loss")
+            self.info = (cfg.device, cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
         else:
             self.info = None
 
