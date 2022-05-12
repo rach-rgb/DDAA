@@ -1,4 +1,7 @@
+import os
 import random
+import logging
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -6,40 +9,94 @@ import torch.nn.functional as F
 
 from augparams import Projector
 from aug_operations import apply_augment
+from networks.nets import LeNet, AlexCifarNet
 
 
-# create and return auto-aug related modules
-def autoaug_creator(device, aug_cfg, cls):
-    p_module = Projector(aug_cfg.in_features, 2 * len(aug_cfg.aug_list)).to(device)
-    aug_module = AugModule(device, aug_cfg, project_module=p_module, task_model=cls)
+# Return Auto-Augmentation Module and Auto-Aug Parameter Optimizer
+# Args: device(str): CPU or CUDA, aug_cfg(Config): configuration for augmentation
+# ext(Object): extractor, p(Object): projector
+# Returns: Augmentation Module, Parameter Optimizer
+def autoaug_creator(device, aug_cfg, ext, p=None):
+    if p is None:
+        p = Projector(aug_cfg.in_features, 2 * len(aug_cfg.aug_list)).to(device)
+        loaded = False
+    else:
+        loaded = True
+
+    augmentor = AugModule(device, aug_cfg, loaded, ext, p)
     p_optimizer = torch.optim.Adam(
-        p_module.parameters(),
+        p.parameters(),
         lr=aug_cfg.p_lr,
         betas=(0.9, 0.999),
         weight_decay=aug_cfg.p_decay_factor
     )
-    return aug_module, p_optimizer
+    return augmentor, p_optimizer
 
 
-# update projection module
-def autoaug_update(device, task_model, aug_module, p_optimizer, val_loader):
+# Update Projection Module
+# Args: device(str): CPU or CUDA, augmentor, p_optimizer
+# val_loader(Dataloader): dataloader of validation set
+def autoaug_update(device, augmentor, p_optimizer, val_loader):
     vdata, vlabel = next(iter(val_loader))
-    vdata, vlabel = vdata.to(device), vlabel.to(device)
+    if not vdata.is_cuda:
+        vdata = vdata.to(device)
+    vlabel = vlabel.to(device)
 
-    aug_module.explore()
+    augmentor.explore()
     p_optimizer.zero_grad()
-    vfeat = aug_module.auto_explore(vdata)
-    output = task_model.cls_label(vfeat)
+    output = augmentor.auto_explore(vdata)
     loss = F.cross_entropy(output, vlabel)
     loss.backward()
     p_optimizer.step()
-    del vfeat, output, loss
+    del output, loss
 
-    aug_module.exploit()
+    augmentor.exploit()
 
 
+# Save Trained Feature Extractor and Parameter Projector
+# Args: aug_cfg(Config): configuration for augmentation, augmentor
+def autoaug_save(aug_cfg, augmentor):
+    output_dir = os.path.join(Path(os.getcwd()).parent, aug_cfg.output_dir)
+
+    # save task_model (feature extractor)
+    output1 = os.path.join(output_dir, 'cls.pth')
+    torch.save(augmentor.extractor.state_dict(), output1)
+
+    # save projector (parameter generator)
+    output2 = os.path.join(output_dir, 'project.pth')
+    torch.save(augmentor.projector.state_dict(), output2)
+
+    logging.info('AutoAug Task Model and Projector saved to {}'.format(aug_cfg.output_dir))
+
+
+# Load Feature Extractor and Projector and Create Auto-Augmentation Module
+# Args: device(str): CPU or CUDA, cfg(Config): configuration for entire project,
+# aug_cfg(Config): configuration for augmentation
+# Returns: Auto-Augmentation Module and Project Optimizer
+def autoaug_load(device, cfg, aug_cfg):
+    load_dir = os.path.join(Path(os.getcwd()).parent, aug_cfg.load_dir)
+
+    # load task_model
+    path1 = os.path.join(load_dir, 'cls.pth')
+    if aug_cfg.name == 'MNIST':
+        f = LeNet(cfg).to(device)
+    else:   # CIFAR-10
+        f = AlexCifarNet(cfg).to(device)
+    f.load_state_dict(torch.load(path1))
+
+    # load projector
+    path2 = os.path.join(load_dir, 'project.pth')
+    p = Projector(aug_cfg.in_features, 2 * len(aug_cfg.aug_list)).to(device)
+    p.load_state_dict(torch.load(path2))
+
+    logging.info('AutoAug Module loaded from {}'.format(aug_cfg.load_dir))
+
+    return autoaug_creator(device, aug_cfg, ext=f, p=p)
+
+
+# Augmentation Module
 class AugModule(nn.Module):
-    def __init__(self, device, aug_cfg, task_model=None, project_module=None):
+    def __init__(self, device, aug_cfg, loaded, ext=None, p=None):
         super().__init__()
         self.cfg = aug_cfg
         self.device = device
@@ -49,8 +106,9 @@ class AugModule(nn.Module):
 
         # auto aug
         self.__mode__ = "exploit"   # explore - train data, exploit - validation data
-        self.model = task_model
-        self.projector = project_module
+        self.loaded = loaded  # module is loaded i.e, already trained
+        self.extractor = ext
+        self.projector = p
 
     # transformation
     def __call__(self, img):
@@ -78,8 +136,17 @@ class AugModule(nn.Module):
             idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
             return apply_augment(img, self.aug_list[idx], mag[idx].item())
 
-    # return mixed augment features
+    # return classification result of mixed feature validation image
+    # Args: imgs(Tensor): validation batch
+    # Returns: output(Tensor): classification result
     def auto_explore(self, imgs):
+        vfeat = self.get_mixed_feat(imgs)
+        output = self.extractor.cls_label(vfeat)
+        del vfeat
+        return output
+
+    # return mixed augment features
+    def get_mixed_feat(self, imgs):
         self.projector.train()
         mixed_feats = []
         for img in imgs:
@@ -87,14 +154,14 @@ class AugModule(nn.Module):
             aug_imgs = []
             for i, op in enumerate(self.aug_list):
                 aug_imgs.append(apply_augment(img, op, mag[i].item()).to(self.device))
-            aug_feats = self.model.get_feature(torch.stack(aug_imgs, dim=0))
+            aug_feats = self.extractor.get_feature(torch.stack(aug_imgs, dim=0))
             mixed_feats.append(torch.matmul(prob, aug_feats))
         return torch.stack(mixed_feats, dim=0)
 
     # predict augmentation parameter
     def get_params(self, img):
-        self.model.eval()
-        feature = self.model.get_feature(img.unsqueeze(0))  # make batch
+        self.extractor.eval()
+        feature = self.extractor.get_feature(img.unsqueeze(0))  # make batch
         params = self.projector(feature)
         prob, mag = torch.split(params, self.n_ops, dim=1)
         prob = F.softmax(prob, dim=1).squeeze(0)

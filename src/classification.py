@@ -3,7 +3,6 @@ import logging
 
 import torch
 import torch.optim as optim
-import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 
 from loss_model import get_loss
@@ -26,6 +25,7 @@ class Classifier:
             logging.info("Classification Loss: Class Balanced Focal Loss")
             self.info = (cfg.device, cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
         else:
+            logging.info("Classification Loss: Cross Entropy Loss")
             self.info = None
 
     # initialize classifier network
@@ -113,10 +113,11 @@ class Classifier:
 
             # explore auto-aug policy
             if do_autoaug and (epoch % ex_intv == 0):
-                ex_t0 = time.time()
-                autoaug_update(device, self.model, aug_module, p_optimizer, cfg.val_loader)
-                ex_t = time.time() - ex_t0
-                logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, ex_t))
+                if not aug_module.loaded:
+                    ex_t0 = time.time()
+                    autoaug_update(device, aug_module, p_optimizer, cfg.val_loader)
+                    ex_t = time.time() - ex_t0
+                    logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, ex_t))
 
             if do_test and (epoch % test_intv == 0):
                 loss, accu = self.test()

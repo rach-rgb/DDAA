@@ -11,9 +11,8 @@ from config import Config
 from distillation import Distiller
 from classification import Classifier
 from utils import load_results, save_results
-from augmentation import AugModule, autoaug_creator
 from dataset import tr_MNIST, tr_CIFAR, MessyDataset, StepDataset
-
+from augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
 
 def main(cfg):
     # device
@@ -88,14 +87,21 @@ def main(cfg):
         if cfg.TRAIN.augment:
             if cfg.TAUG.aug_type == "Random":
                 logging.info("Apply Random Augmentation")
-                aug_module = AugModule(device, cfg.TAUG)
-                cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
+                augmentor = AugModule(device, cfg.TAUG)
+                cfg.test_train_loader.dataset.transform.transforms.append(augmentor)
                 cls.train_and_evaluate()
             elif cfg.TAUG.aug_type == "Auto":
                 logging.info("Apply Auto Augmentation")
-                aug_module, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
-                cfg.test_train_loader.dataset.transform.transforms.append(aug_module)
-                cls.train_and_evaluate(autoaug=True, modules=(aug_module, p_optimizer))
+                # model load
+                if cfg.TAUG.load:   # use pretrained augment policy
+                    augmentor, p_optimizer = autoaug_load(device, cfg, cfg.TAUG)
+                else:
+                    augmentor, p_optimizer = autoaug_creator(device, cfg.TAUG, ext=cls.model)
+                cfg.test_train_loader.dataset.transform.transforms.append(augmentor)
+                cls.train_and_evaluate(autoaug=True, modules=(augmentor, p_optimizer))
+                # model save
+                if cfg.TAUG.save:
+                    autoaug_save(cfg.TAUG, augmentor)
             else:
                 logging.error("Augmentation {} not implemented".format(cfg.TAUG.aug_type))
                 raise NotImplementedError

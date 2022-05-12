@@ -115,7 +115,7 @@ class Distiller:
 
     # train task model using distilled data
     def forward(self, model, rdata, rlabel, steps):
-        raw_loss_crit = self.cfg.rloss_crit
+        raw_loss_crit = self.cfg.DISTILL.rloss_crit
 
         # forward distilled dataset
         model.train()
@@ -124,6 +124,7 @@ class Distiller:
         gws = []
 
         for step, (data, label, lr) in enumerate(steps):
+            print(torch.cuda.memory_allocated())
             with torch.enable_grad():
                 output = model.forward_with_param(data, w)
                 loss = F.cross_entropy(output, label)
@@ -203,7 +204,7 @@ class Distiller:
             if cfg.RAUG.aug_type == 'Random':
                 aug_module = AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
-                assert not self.do_vis
+                assert not self.do_val
                 # TODO: decouple task_model, aug_module, p_optimizer
                 aug_module, p_optimizer = autoaug_creator(device, cfg.RAUG, task_models[0])
                 exp_intv = cfg.RAUG.search_intv
@@ -229,7 +230,7 @@ class Distiller:
                 ex_t0 = time.time()
                 for idx, model in enumerate(task_models):
                     model.unflatten_weight(task_params[idx])
-                    autoaug_update(device, model, aug_module, p_optimizer, cfg.val_loader)
+                    autoaug_update(device, aug_module, p_optimizer, cfg.val_loader)
                 ex_t = time.time() - ex_t0
                 logging.info('Epoch: {:4d}, Iteration: {:4d}, Search time: {:.2f}'.format(epoch, it, ex_t))
 
