@@ -5,11 +5,10 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
+import augmentation as aug
+from utils import visualize
 from loss_model import get_loss
 from networks.nets import LeNet, AlexCifarNet
-from augmentation import AugModule, autoaug_creator, autoaug_update
-
-from utils import visualize
 
 
 # Dataset Distillation Module
@@ -45,6 +44,7 @@ class Distiller:
             logging.info("Distillation Raw Data Loss: Class Balanced Focal Loss")
         else:
             self.info = None
+            logging.info("Distillation Raw Data Loss: Cross Entropy Loss")
         assert cfg.DISTILL.dloss_crit == 'CE'
 
     # init models
@@ -197,21 +197,24 @@ class Distiller:
         val_intv = cfg.DISTILL.val_intv if self.do_val else unreach_ep
 
         # augmentation
-        aug_module = None
+        augmentor = None
         p_optimizer = None
         exp_intv = unreach_ep
+        do_autoaug = True if self.do_raug and cfg.RAUG.aug_type == 'Auto' else False
         if self.do_raug:
             if cfg.RAUG.aug_type == 'Random':
-                aug_module = AugModule(device, cfg.RAUG)
+                augmentor = aug.AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
                 assert not self.do_val
-                # TODO: decouple task_model, aug_module, p_optimizer
-                aug_module, p_optimizer = autoaug_creator(device, cfg.RAUG, task_models[0])
+                if cfg.RAUG.load:
+                    augmentor, p_optimizer = aug.autoaug_load(device, cfg, cfg.RAUG)
+                else:
+                    augmentor, p_optimizer = aug.autoaug_creator(device, cfg.RAUG, task_models[0])
                 exp_intv = cfg.RAUG.search_intv
             else:
                 logging.error("{} Augmentation for raw data not implemented".format(cfg.RAUG.aug_type))
                 raise NotImplementedError
-            cfg.train_loader.dataset.transform.transforms.append(aug_module)
+            cfg.train_loader.dataset.transform.transforms.append(augmentor)
 
         if self.do_daug:
             logging.error("Augmentation for distilled data during distillation not implemented")
@@ -226,13 +229,14 @@ class Distiller:
                 self.scheduler.step()
 
             # explore auto-aug strategy
-            if self.do_raug and epoch % exp_intv == 0 and it == 0 and epoch != 0:
-                ex_t0 = time.time()
-                for idx, model in enumerate(task_models):
-                    model.unflatten_weight(task_params[idx])
-                    autoaug_update(device, aug_module, p_optimizer, cfg.val_loader)
-                ex_t = time.time() - ex_t0
-                logging.info('Epoch: {:4d}, Iteration: {:4d}, Search time: {:.2f}'.format(epoch, it, ex_t))
+            if do_autoaug and epoch % exp_intv == 0 and it == 0 and epoch != 0:
+                if not augmentor.loaded:
+                    ex_t0 = time.time()
+                    for idx, model in enumerate(task_models):
+                        model.unflatten_weight(task_params[idx])
+                        aug.autoaug_update(device, augmentor, p_optimizer, cfg.val_loader)
+                    ex_t = time.time() - ex_t0
+                    logging.info('Epoch: {:4d}, Iteration: {:4d}, Search time: {:.2f}'.format(epoch, it, ex_t))
 
             train_t0 = time.time()
 
@@ -294,6 +298,10 @@ class Distiller:
             data_t0 = time.time()
             # end of for loop
         logging.info('Distillation finished')
+
+        # model save
+        if do_autoaug and cfg.RAUG.save:
+            aug.autoaug_save(cfg.RAUG, augmentor)
 
         with torch.no_grad():
             steps = self.get_steps()

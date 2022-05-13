@@ -96,7 +96,7 @@ def autoaug_load(device, cfg, aug_cfg):
 
 # Augmentation Module
 class AugModule(nn.Module):
-    def __init__(self, device, aug_cfg, loaded, ext=None, p=None):
+    def __init__(self, device, aug_cfg, loaded=False, ext=None, p=None):
         super().__init__()
         self.cfg = aug_cfg
         self.device = device
