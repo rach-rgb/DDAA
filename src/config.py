@@ -28,8 +28,8 @@ class Config(object):
             }
         elif cfg.name == 'CIFAR-10':
             dataset_info = {
-                'mean': (0.5, 0.5, 0.5),
-                'std': (0.5, 0.5, 0.5),
+                'mean': (0.4914, 0.4822, 0.4465),
+                'std': (0.247, 0.243, 0.261),
                 'num_classes': 10,
                 'num_channels': 3,
                 'input_size': 32,
@@ -55,8 +55,8 @@ class Config(object):
             }
         elif cfg.name == 'CIFAR-10':
             aug_info = {
-                'mean': (0.5, 0.5, 0.5),
-                'std': (0.5, 0.5, 0.5),
+                'mean': (0.4914, 0.4822, 0.4465),
+                'std': (0.247, 0.243, 0.261),
                 'num_classes': 10,
                 'num_channels': 3,
                 'in_features': 4096,

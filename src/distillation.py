@@ -124,7 +124,6 @@ class Distiller:
         gws = []
 
         for step, (data, label, lr) in enumerate(steps):
-            print(torch.cuda.memory_allocated())
             with torch.enable_grad():
                 output = model.forward_with_param(data, w)
                 loss = F.cross_entropy(output, label)

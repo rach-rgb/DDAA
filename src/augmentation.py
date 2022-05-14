@@ -103,6 +103,7 @@ class AugModule(nn.Module):
         self.aug_type = aug_cfg.aug_type
         self.aug_list = aug_cfg.aug_list
         self.n_ops = len(self.aug_list)
+        self.random_apply = aug_cfg.random_apply
 
         # auto aug
         self.__mode__ = "exploit"   # explore - train data, exploit - validation data
@@ -112,6 +113,10 @@ class AugModule(nn.Module):
 
     # transformation
     def __call__(self, img):
+        if self.random_apply:   # return raw image
+            if random.random() > 0.5:
+                return img
+
         if self.aug_type == 'Random':
             return apply_augment(img, random.choice(self.aug_list), random.random())
         elif self.aug_type == 'Auto':

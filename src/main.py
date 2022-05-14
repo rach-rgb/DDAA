@@ -78,7 +78,7 @@ def main(cfg):
             if not cfg.TRAIN.use_full_steps:
                 steps = steps[:cfg.DISTILL.d_steps]
             step_dataset = StepDataset(cfg.DATA_SET.num_classes, steps)
-            cfg.test_train_loader = data.DataLoader(step_dataset, 1, shuffle=True, num_workers=1, pin_memory=True)
+            cfg.test_train_loader = data.DataLoader(step_dataset, 1, shuffle=True, num_workers=1)
             logging.info('Use distilled dataset with size: %d for training', len(steps))
         else:
             cfg.test_train_loader = cfg.train_loader  # use train loader (raw data)

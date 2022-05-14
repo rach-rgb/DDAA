@@ -17,16 +17,7 @@ class Classifier:
         self.device = cfg.device
         self.epochs = cfg.TRAIN.epochs
         self.model = self.init_models()
-        self.optimizer = optim.Adadelta(self.model.parameters(), lr=cfg.TRAIN.lr)
-        self.scheduler = StepLR(self.optimizer, step_size=cfg.TRAIN.decay_epochs, gamma=cfg.TRAIN.decay_factor)
-
-        # focal loss parameters
-        if cfg.TRAIN.tloss_crit == 'BF':
-            logging.info("Classification Loss: Class Balanced Focal Loss")
-            self.info = (cfg.device, cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
-        else:
-            logging.info("Classification Loss: Cross Entropy Loss")
-            self.info = None
+        self.optimizer, self.scheduler, self.loss_info = self.init_others(cfg)
 
     # initialize classifier network
     def init_models(self):
@@ -40,6 +31,44 @@ class Classifier:
             raise NotImplementedError
         logging.info("Classifier Network: {}".format(cfg.TRAIN.model))
         return model
+
+    def init_others(self, cfg):
+        # optimizer
+        if cfg.TRAIN.optimizer == 'Adadelta':
+            optimizer = optim.Adadelta(self.model.parameters(), lr=cfg.TRAIN.lr)
+        elif cfg.TRAIN.optimizer == 'SGD':
+            c = cfg.TRAIN.SGD
+            optimizer = torch.optim.SGD(self.model.parameters(), lr=cfg.TRAIN.lr,
+                                        weight_decay=c.weight_decay, momentum=c.momentum)
+        else:
+            logging.error("Optimizer {} not implemented".format(cfg.TRAIN.optimizer))
+            raise NotImplementedError
+
+        # scheduler
+        if cfg.TRAIN.scheduler == 'StepLR':
+            c = cfg.TRAIN.StepLR
+            scheduler = StepLR(self.optimizer, step_size=c.decay_epochs, gamma=c.decay_factor)
+        elif cfg.TRAIN.scheduler == 'ReduceLR':
+            c = cfg.TRAIN.ReduceLROnPlateau
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2, factor=c.factor)
+        else:
+            logging.error("Scheduler {} not implemented".format(cfg.TRAIN.scheduler))
+            raise NotImplementedError
+
+        # loss
+        if cfg.TRAIN.tloss_crit == 'CE':
+            loss_info = None
+        elif cfg.TRAIN.tloss_crit == 'BF':
+            loss_info = (
+            cfg.device, cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
+        else:
+            logging.error("Loss Model {} not implemented".format(cfg.TRAIN.tloss_crit))
+            raise NotImplementedError
+
+        logging.info("Optimizer: {}, Scheduler: {}, Loss: {}"
+                     .format(cfg.TRAIN.optimizer, cfg.TRAIN.scheduler, cfg.TRAIN.tloss_crit))
+
+        return optimizer, scheduler, loss_info
 
     # train model with test_train_loader
     def train(self):
@@ -55,7 +84,7 @@ class Classifier:
             data, label = data.to(device), label.to(device)
             optimizer.zero_grad()
             output = model(data)
-            loss = get_loss(output, label, loss_type, params=self.info)
+            loss = get_loss(output, label, loss_type, params=self.loss_info)
             loss.backward()
             optimizer.step()
         scheduler.step()
@@ -82,7 +111,8 @@ class Classifier:
 
         return avg_loss, accuracy
 
-    # train and test model
+    # train and test classifier
+    # Args: autoaug(Bool): apply auto-augmentation or not, modules(tuple): models used for auto-aug
     def train_and_evaluate(self, autoaug=False, modules=None):
         cfg = self.cfg
         device = self.device
