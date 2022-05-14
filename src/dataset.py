@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import torch.utils.data as data
 from torchvision import transforms
-
 from utils import step_to_tensor
 
 
@@ -36,15 +35,15 @@ class MessyDataset(data.Dataset):
         if index is not None:
             x, y = self.get_subset(index, x, y)
 
-        # class distribution
-        self.n_classes = cfg.DATA_SET.num_classes
-        self.n_per_classes = [int(len(x) / self.n_classes)] * self.n_classes
-
         if mess:  # apply mess ratio for train set
             x, y = self.make_mess(cfg, x, y)
 
-        self.data = x       # Tensor [num_of_data, (C), H, W]
-        self.targets = y    # Tensor [num_of_data]
+        # class distribution
+        self.n_classes = cfg.DATA_SET.num_classes
+        self.n_per_classes = [len(np.where(y == cls)[0]) for cls in range(0, self.n_classes)]
+
+        self.data = x  # Tensor [num_of_data, (C), H, W]
+        self.targets = y  # Tensor [num_of_data]
 
         self.transform = transform
 
@@ -76,14 +75,12 @@ class MessyDataset(data.Dataset):
         if imbalance_r != 1:
             logging.info("Apply class imbalance ratio: %0.2f", imbalance_r)
             small_label = [x for x in range(0, int(num_classes / 2))]
-            large_size = int(len(x) / num_classes)
-            small_size = int(large_size * imbalance_r)
 
             remove_idx = []
             ny = y.numpy()
             for label in small_label:
-                remove_idx = remove_idx + list(np.where(ny == label)[0][:large_size - small_size])
-                self.n_per_classes[label] = small_size
+                label_idx = np.where(ny == label)[0]
+                remove_idx = remove_idx + list(label_idx[:int(len(label_idx) * (1-imbalance_r))])
 
             mask = np.ones(len(y), dtype=bool)
             mask[remove_idx] = False
@@ -104,10 +101,10 @@ class MessyDataset(data.Dataset):
 class StepDataset(data.Dataset):
     def __init__(self, n_classes, steps):
         self.data, self.targets = step_to_tensor(steps)
-        self.data = torch.stack(self.data, dim=0)      # Tensor [num_of_data, C, W, H]
-        self.targets = torch.tensor(self.targets)      # Tensor [num_of_data]
+        self.data = torch.stack(self.data, dim=0)  # Tensor [num_of_data, C, W, H]
+        self.targets = torch.tensor(self.targets)  # Tensor [num_of_data]
 
-        self.transform = transforms.Compose([])             # empty
+        self.transform = transforms.Compose([])  # empty
 
         # class distribution
         self.n_classes = n_classes

@@ -3,7 +3,7 @@ import logging
 
 import torch
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 
 from loss_model import get_loss
 from augmentation import autoaug_update
@@ -17,7 +17,11 @@ class Classifier:
         self.device = cfg.device
         self.epochs = cfg.TRAIN.epochs
         self.model = self.init_models()
-        self.optimizer, self.scheduler, self.loss_info = self.init_others(cfg)
+
+        self.optimizer = None
+        self.scheduler = None
+        self.loss_info = None
+        self.init_others(cfg)
 
     # initialize classifier network
     def init_models(self):
@@ -35,11 +39,11 @@ class Classifier:
     def init_others(self, cfg):
         # optimizer
         if cfg.TRAIN.optimizer == 'Adadelta':
-            optimizer = optim.Adadelta(self.model.parameters(), lr=cfg.TRAIN.lr)
+            self.optimizer = optim.Adadelta(self.model.parameters(), lr=cfg.TRAIN.lr)
         elif cfg.TRAIN.optimizer == 'SGD':
             c = cfg.TRAIN.SGD
-            optimizer = torch.optim.SGD(self.model.parameters(), lr=cfg.TRAIN.lr,
-                                        weight_decay=c.weight_decay, momentum=c.momentum)
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=cfg.TRAIN.lr,
+                                             weight_decay=c.weight_decay, momentum=c.momentum)
         else:
             logging.error("Optimizer {} not implemented".format(cfg.TRAIN.optimizer))
             raise NotImplementedError
@@ -47,28 +51,23 @@ class Classifier:
         # scheduler
         if cfg.TRAIN.scheduler == 'StepLR':
             c = cfg.TRAIN.StepLR
-            scheduler = StepLR(self.optimizer, step_size=c.decay_epochs, gamma=c.decay_factor)
-        elif cfg.TRAIN.scheduler == 'ReduceLR':
-            c = cfg.TRAIN.ReduceLROnPlateau
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2, factor=c.factor)
-        else:
+            self.scheduler = StepLR(self.optimizer, step_size=c.decay_epochs, gamma=c.decay_factor)
+        elif cfg.TRAIN.scheduler != 'None':
             logging.error("Scheduler {} not implemented".format(cfg.TRAIN.scheduler))
             raise NotImplementedError
 
         # loss
         if cfg.TRAIN.tloss_crit == 'CE':
-            loss_info = None
-        elif cfg.TRAIN.tloss_crit == 'BF':
-            loss_info = (
-            cfg.device, cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
+            self.loss_info = None
+        elif cfg.TRAIN.tloss_crit == 'BF' or cfg.TRAIN.tloss_crit == 'BCE':
+            self.loss_info = (cfg.device,
+                              cfg.test_train_loader.dataset.n_classes, cfg.test_train_loader.dataset.n_per_classes)
         else:
             logging.error("Loss Model {} not implemented".format(cfg.TRAIN.tloss_crit))
             raise NotImplementedError
 
         logging.info("Optimizer: {}, Scheduler: {}, Loss: {}"
                      .format(cfg.TRAIN.optimizer, cfg.TRAIN.scheduler, cfg.TRAIN.tloss_crit))
-
-        return optimizer, scheduler, loss_info
 
     # train model with test_train_loader
     def train(self):
@@ -87,7 +86,9 @@ class Classifier:
             loss = get_loss(output, label, loss_type, params=self.loss_info)
             loss.backward()
             optimizer.step()
-        scheduler.step()
+
+        if self.scheduler is not None:
+            scheduler.step()
 
     # test model with test_loader
     def test(self):
