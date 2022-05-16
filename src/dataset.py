@@ -24,7 +24,7 @@ tr_CIFAR = transforms.Compose([
 
 
 # create messy dataset
-class MessyDataset(data.Dataset):
+class RawDataset(data.Dataset):
     def __init__(self, cfg, dataset, mess, index=None, transform=None):
         x = dataset.data
         y = dataset.targets
@@ -73,7 +73,7 @@ class MessyDataset(data.Dataset):
 
         # apply class imbalance
         if imbalance_r != 1:
-            logging.info("Apply class imbalance ratio: %0.2f", imbalance_r)
+            logging.info("Apply class imbalance ratio: %0.3f", imbalance_r)
             small_label = [x for x in range(0, int(num_classes / 2))]
 
             remove_idx = []

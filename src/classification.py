@@ -3,7 +3,7 @@ import logging
 
 import torch
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
 
 from loss_model import get_loss
 from augmentation import autoaug_update
@@ -52,6 +52,9 @@ class Classifier:
         if cfg.TRAIN.scheduler == 'StepLR':
             c = cfg.TRAIN.StepLR
             self.scheduler = StepLR(self.optimizer, step_size=c.decay_epochs, gamma=c.decay_factor)
+        elif cfg.TRAIN.scheduler == 'CosineAnnealing':
+            c = cfg.TRAIN.CosineAnnealing
+            self.scheduler = CosineAnnealingLR(self.optimizer, self.epochs, eta_min=c.lr_min)
         elif cfg.TRAIN.scheduler != 'None':
             logging.error("Scheduler {} not implemented".format(cfg.TRAIN.scheduler))
             raise NotImplementedError

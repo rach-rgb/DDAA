@@ -59,11 +59,11 @@ def autoaug_save(aug_cfg, augmentor):
     output_dir = os.path.join(Path(os.getcwd()).parent, aug_cfg.output_dir)
 
     # save task_model (feature extractor)
-    output1 = os.path.join(output_dir, 'cls.pth')
+    output1 = os.path.join(output_dir, 'extractor_weights.pth')
     torch.save(augmentor.extractor.state_dict(), output1)
 
     # save projector (parameter generator)
-    output2 = os.path.join(output_dir, 'project.pth')
+    output2 = os.path.join(output_dir, 'projector_weights.pth')
     torch.save(augmentor.projector.state_dict(), output2)
 
     logging.info('AutoAug Task Model and Projector saved to {}'.format(aug_cfg.output_dir))
@@ -77,7 +77,7 @@ def autoaug_load(device, cfg, aug_cfg):
     load_dir = os.path.join(Path(os.getcwd()).parent, aug_cfg.load_dir)
 
     # load task_model
-    path1 = os.path.join(load_dir, 'cls.pth')
+    path1 = os.path.join(load_dir, 'extractor_weights.pth')
     if aug_cfg.name == 'MNIST':
         f = LeNet(cfg).to(device)
     else:   # CIFAR-10
@@ -85,13 +85,24 @@ def autoaug_load(device, cfg, aug_cfg):
     f.load_state_dict(torch.load(path1))
 
     # load projector
-    path2 = os.path.join(load_dir, 'project.pth')
+    path2 = os.path.join(load_dir, 'projector_weights.pth')
     p = Projector(aug_cfg.in_features, 2 * len(aug_cfg.aug_list)).to(device)
     p.load_state_dict(torch.load(path2))
 
     logging.info('AutoAug Module loaded from {}'.format(aug_cfg.load_dir))
 
     return autoaug_creator(device, aug_cfg, ext=f, p=p)
+
+
+def perturb_param(param, delta):
+    if delta <= 0:
+        return param
+
+    amt = random.uniform(0, delta)
+    if random.random() < 0.5:
+        return max(0, param - amt)
+    else:
+        return min(1, param + amt)
 
 
 # Augmentation Module
@@ -104,6 +115,9 @@ class AugModule(nn.Module):
         self.aug_list = aug_cfg.aug_list
         self.n_ops = len(self.aug_list)
         self.random_apply = aug_cfg.random_apply
+        self.k_ops = aug_cfg.k_ops
+        self.temp = aug_cfg.temp
+        self.delta = aug_cfg.delta
 
         # auto aug
         self.__mode__ = "exploit"   # explore - train data, exploit - validation data
@@ -138,8 +152,16 @@ class AugModule(nn.Module):
         self.projector.eval()
         with torch.no_grad():
             prob, mag = self.get_params(img.to(self.device))
-            idx = torch.topk(prob, 1, dim=0)[1]     # select max probability operation
-            return apply_augment(img, self.aug_list[idx], mag[idx].item())
+            op_indices = torch.topk(prob, self.k_ops, dim=0)[1]
+            if self.k_ops > 1:
+                aimg = img
+                for idx in op_indices:
+                    mag = perturb_param(mag[idx].item(), self.delta)
+                    aimg = apply_augment(aimg, self.aug_list[idx], mag[idx].item())
+                return aimg
+            else:
+                idx = op_indices
+                return apply_augment(img, self.aug_list[idx], mag[idx].item())
 
     # return classification result of mixed feature validation image
     # Args: imgs(Tensor): validation batch
@@ -166,9 +188,14 @@ class AugModule(nn.Module):
     # predict augmentation parameter
     def get_params(self, img):
         self.extractor.eval()
+        if self.__mode__ == "exploit":
+            T = self.temp
+        else:   # mode == 'explore'
+            T = 1.0
+
         feature = self.extractor.get_feature(img.unsqueeze(0))  # make batch
         params = self.projector(feature)
         prob, mag = torch.split(params, self.n_ops, dim=1)
         prob = F.softmax(prob, dim=1).squeeze(0)
-        mag = torch.sigmoid(mag).squeeze(0)
+        mag = torch.sigmoid(mag/T).squeeze(0)
         return prob, mag

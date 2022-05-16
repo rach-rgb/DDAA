@@ -86,3 +86,24 @@ class Config(object):
 
     def __setattr__(self, key, value):
         self.set_attribute({key: value})
+
+
+def search_cfg(cfg):
+    data = cfg.DATA_SET.name
+
+    # search size
+    if cfg.DATA_SET.raw == "raw":
+        if data == 'CIFAR-10':
+            cfg.DATA_SET.search_size = 45000    # (45744 / 50000)
+        else:   # data == 'MNIST'
+            cfg.DATA_SET.search_size = 54000    # (54000 / 60000)
+    else:   # distilled
+        n_steps = cfg.DISTILL.d_steps
+        cfg.DATA_SET.search_size = int(n_steps * 0.9) * cfg.DISTILL.num_per_class * cfg.DATA_SET.num_classes
+
+    # search_batch_size
+    if cfg.EXPLORE.model == 'AlexCifarNet':
+        cfg.DATA_SET.search_batch_size = 256
+    else:   # model == 'LeNet'
+        cfg.DATA_SET.search_batch_size = 512
+    # others: wresnet40_2 -> 32, resnet50 -> 128

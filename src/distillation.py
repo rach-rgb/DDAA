@@ -39,12 +39,15 @@ class Distiller:
                                                    gamma=cfg.DISTILL.decay_factor)
 
         # focal loss parameters
-        if cfg.DISTILL.rloss_crit == 'BF':
-            self.info = (cfg.device, cfg.train_loader.n_classes, cfg.train_loader.n_per_classes)
-            logging.info("Distillation Raw Data Loss: Class Balanced Focal Loss")
-        else:
+        if cfg.DISTILL.rloss_crit == 'BF' or cfg.DISTILL.rloss_crit == 'BCE':
+            self.info = (cfg.device,
+                         cfg.train_loader.dataset.n_classes, cfg.train_loader.dataset.n_per_classes)
+        elif cfg.DISTILL.rloss_crit == 'CE':
             self.info = None
-            logging.info("Distillation Raw Data Loss: Cross Entropy Loss")
+        else:
+            logging.error("Loss Model {} not implemented".format(cfg.DISTILL.rloss_crit))
+            raise NotImplementedError
+        logging.info("Loss: {}".format(cfg.DISTILL.rloss_crit))
         assert cfg.DISTILL.dloss_crit == 'CE'
 
     # init models

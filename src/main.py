@@ -11,8 +11,9 @@ from config import Config
 from distillation import Distiller
 from classification import Classifier
 from utils import load_results, save_results
-from dataset import tr_MNIST, tr_CIFAR, MessyDataset, StepDataset
+from dataset import tr_MNIST, tr_CIFAR, RawDataset, StepDataset
 from augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
+
 
 def main(cfg):
     # device
@@ -41,13 +42,13 @@ def main(cfg):
         train_idx, val_idx, _, _ = train_test_split(range(len(clean_dataset)), clean_dataset.targets,
                                                     stratify=clean_dataset.targets, test_size=cfg.DATA_SET.val_size)
         # validation loader
-        val_dataset = MessyDataset(cfg, clean_dataset, mess=False, index=val_idx, transform=tr)
+        val_dataset = RawDataset(cfg, clean_dataset, mess=False, index=val_idx, transform=tr)
         cfg.val_loader = data.DataLoader(val_dataset, batch_size, shuffle=True, num_workers=num_workers)
         logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, len(val_dataset))
         # train loader
-        train_dataset = MessyDataset(cfg, clean_dataset, mess=True, index=train_idx, transform=tr)
+        train_dataset = RawDataset(cfg, clean_dataset, mess=True, index=train_idx, transform=tr)
     else:
-        train_dataset = MessyDataset(cfg, clean_dataset, mess=True, transform=tr)
+        train_dataset = RawDataset(cfg, clean_dataset, mess=True, transform=tr)
 
     cfg.train_loader = data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
     logging.info('Load train dataset: %s, size: %d, class imbalance: %.2f, label noise: %.2f',
