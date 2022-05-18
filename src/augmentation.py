@@ -10,8 +10,7 @@ import torch.nn.functional as F
 from augparams import Projector
 from aug_operations import apply_augment
 from networks.nets import LeNet, AlexCifarNet
-
-from utils import tensor_to_pil, concat_row
+from transform import valid_after_MNIST, valid_after_CIFAR
 
 
 # Return Auto-Augmentation Module and Auto-Aug Parameter Optimizer
@@ -39,20 +38,17 @@ def autoaug_creator(device, aug_cfg, ext, p=None):
 # Args: device(str): CPU or CUDA, augmentor, p_optimizer
 # val_loader(Dataloader): dataloader of validation set
 def autoaug_update(device, augmentor, p_optimizer, val_loader):
-    vdata, vlabel = next(iter(val_loader))
+    vdata, vlabel = next(iter(val_loader))  # get tensor image
     if not vdata.is_cuda:
         vdata = vdata.to(device)
     vlabel = vlabel.to(device)
 
-    augmentor.explore()
     p_optimizer.zero_grad()
-    output = augmentor.auto_explore(vdata)
+    output = augmentor.explore(vdata)
     loss = F.cross_entropy(output, vlabel)
     loss.backward()
     p_optimizer.step()
     del output, loss
-
-    augmentor.exploit()
 
 
 # Save Trained Feature Extractor and Parameter Projector
@@ -122,10 +118,13 @@ class AugModule(nn.Module):
         self.delta = aug_cfg.delta
 
         # auto aug
-        self.__mode__ = "exploit"   # explore - train data, exploit - validation data
         self.loaded = loaded  # module is loaded i.e, already trained
         self.extractor = ext
         self.projector = p
+        if aug_cfg.name == 'MNIST':     # normalization in explore pass
+            self.transforms = valid_after_MNIST
+        else:   # CIFAR-10
+            self.transforms = valid_after_CIFAR
 
     # transformation
     def __call__(self, img):
@@ -136,24 +135,13 @@ class AugModule(nn.Module):
         if self.aug_type == 'Random':
             return apply_augment(img, random.choice(self.aug_list), random.random())
         elif self.aug_type == 'Auto':
-            if self.__mode__ == "explore":
-                return img  # perform exploration manually
-            elif self.__mode__ == "exploit":
-                return self.auto_exploit(img)
+            return self.auto_exploit(img)
 
-    # switch mode to explore
-    def explore(self):
-        self.__mode__ = "explore"
-
-    # switch mode to exploit
-    def exploit(self):
-        self.__mode__ = "exploit"
-
-    # return augment image
+    # return auto-augment image
     def auto_exploit(self, img):
         self.projector.eval()
         with torch.no_grad():
-            prob, mag = self.get_params(img.to(self.device))
+            prob, mag = self.get_params(img.to(self.device), self.temp)
             op_indices = torch.topk(prob, self.k_ops, dim=0)[1]
             aimg = img
             for idx in op_indices:
@@ -165,7 +153,8 @@ class AugModule(nn.Module):
     # return classification result of mixed feature validation image
     # Args: imgs(Tensor): validation batch
     # Returns: output(Tensor): classification result
-    def auto_explore(self, imgs):
+    def explore(self, imgs):
+        self.projector.train()
         vfeat = self.get_mixed_feat(imgs)
         output = self.extractor.cls_label(vfeat)
         del vfeat
@@ -173,28 +162,24 @@ class AugModule(nn.Module):
 
     # return mixed augment features
     def get_mixed_feat(self, imgs):
-        self.projector.train()
         mixed_feats = []
         for img in imgs:
-            prob, mag = self.get_params(img)
+            prob, mag = self.get_params(img, 1.0)
             aug_imgs = []
             for i, op in enumerate(self.aug_list):
-                aug_imgs.append(apply_augment(img, op, mag[i].item()).to(self.device))
+                aimg = apply_augment(img, op, mag[i].item()).to(self.device)
+                aimg = self.transforms(aimg)    # normalize
+                aug_imgs.append(aimg)
             aug_feats = self.extractor.get_feature(torch.stack(aug_imgs, dim=0))
             mixed_feats.append(torch.matmul(prob, aug_feats))
         return torch.stack(mixed_feats, dim=0)
 
     # predict augmentation parameter
-    def get_params(self, img):
+    def get_params(self, img, temp):
         self.extractor.eval()
-        if self.__mode__ == "exploit":
-            T = self.temp
-        else:   # mode == 'explore'
-            T = 1.0
-
         feature = self.extractor.get_feature(img.unsqueeze(0))  # make batch
         params = self.projector(feature)
         prob, mag = torch.split(params, self.n_ops, dim=1)
         prob = F.softmax(prob, dim=1).squeeze(0)
-        mag = torch.sigmoid(mag/T).squeeze(0)
+        mag = torch.sigmoid(mag/temp).squeeze(0)
         return prob, mag

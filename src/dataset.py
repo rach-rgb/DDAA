@@ -7,23 +7,7 @@ from torchvision import transforms
 from utils import step_to_tensor
 
 
-class ToFloatTensor(object):
-    def __call__(self, img):
-        return torch.unsqueeze(img.type(torch.FloatTensor) / 255, 0)
-
-
-tr_MNIST = transforms.Compose([
-    ToFloatTensor(),
-    transforms.Normalize(0.1307, 0.3081)
-])
-
-tr_CIFAR = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
-])
-
-
-# create messy dataset
+# create custom dataset
 class RawDataset(data.Dataset):
     def __init__(self, cfg, dataset, mess, index=None, transform=None):
         x = dataset.data
@@ -57,6 +41,12 @@ class RawDataset(data.Dataset):
 
     def __len__(self):
         return len(self.data)
+
+    # add augmentor module
+    # Args: index(int): 1(before normalize), 2(after normalize)
+    # augmentor(AugModule)
+    def add_augmentation(self, index, augmentor):
+        self.transform.transforms.insert(index, augmentor)
 
     def get_subset(self, index, x, y):
         mask = np.zeros(len(y), dtype=bool)

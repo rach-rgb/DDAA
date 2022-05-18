@@ -216,7 +216,7 @@ class Distiller:
             else:
                 logging.error("{} Augmentation for raw data not implemented".format(cfg.RAUG.aug_type))
                 raise NotImplementedError
-            cfg.train_loader.dataset.transform.transforms.append(augmentor)
+            cfg.train_loader.dataset.add_augmentation(1, augmentor) # Tensor -> Aug -> Normalize
 
         if self.do_daug:
             logging.error("Augmentation for distilled data during distillation not implemented")

@@ -50,8 +50,7 @@ class Config(object):
                 'num_classes': 10,
                 'num_channels': 3,
                 'in_features': 84,
-                'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate',
-                             'Brightness', 'Sharpness', 'Identity']
+                'aug_list': ['ShearX', 'ShearY', 'TranslateX', 'TranslateY', 'Rotate', 'Identity']
             }
         elif cfg.name == 'CIFAR-10':
             aug_info = {

@@ -3,15 +3,16 @@ import logging
 from os import path
 
 import torch
+from torchvision import datasets
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 from sklearn.model_selection import train_test_split
 
+import transform as tr
 from utils import load_results
 from config import Config, search_cfg
 from classification import Classifier
+from dataset import RawDataset, StepDataset
 from augmentation import autoaug_creator, autoaug_save
-from dataset import tr_MNIST, tr_CIFAR, RawDataset, StepDataset
 
 
 def main(cfg):
@@ -30,15 +31,17 @@ def main(cfg):
     if is_raw:
         if is_MNIST:
             total_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
-            tr = tr_MNIST
+            tr_train = tr.train_MNIST
+            tr_search_pre = tr.valid_pre_MNIST
         else:  # CIFAR-10
             total_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=True, download=True)
-            tr = tr_CIFAR
+            tr_train = tr.train_CIFAR
+            tr_search_pre = tr.valid_pre_CIFAR
         train_idx, search_idx, _, _ = train_test_split(range(len(total_dataset)), total_dataset.targets,
                                                        stratify=total_dataset.targets,
                                                        test_size=cfg.DATA_SET.search_size)
-        train_dataset = RawDataset(cfg, total_dataset, mess=False, index=train_idx, transform=tr)
-        search_dataset = RawDataset(cfg, total_dataset, mess=False, index=search_idx, transform=tr)
+        train_dataset = RawDataset(cfg, total_dataset, mess=False, index=train_idx, transform=tr_train)
+        search_dataset = RawDataset(cfg, total_dataset, mess=False, index=search_idx, transform=tr_search_pre)
     else:  # distilled dataset
         steps = load_results(cfg)[:cfg.DISTILL.d_steps]
         train_n_step = cfg.DATA_SET.search_size / cfg.DISTLL.num_per_class / cfg.DATA_SET.num_classes
@@ -52,14 +55,10 @@ def main(cfg):
     logging.info('Load train dataset: %s, size: %d', cfg.DATA_SET.name, len(train_dataset))
     logging.info('Load search dataset: %s, size: %d', cfg.DATA_SET.name, len(search_dataset))
 
-    tr_norm = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(cfg.DATA_SET.mean, cfg.DATA_SET.std)
-    ])
     if is_MNIST:
-        test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr_norm, download=True)
+        test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr.test_MNIST, download=True)
     else:  # CIFAR-10
-        test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr_norm, download=True)
+        test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr.test_CIFAR, download=True)
     cfg.test_loader = DataLoader(test_dataset, cfg.DATA_SET.batch_size, shuffle=True, num_workers=n_workers,
                                  pin_memory=True)
     logging.info('Load test dataset: %s, size: %d', cfg.DATA_SET.name, len(test_dataset))
@@ -67,7 +66,7 @@ def main(cfg):
     # model
     cls = Classifier(cfg)
     augmentor, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
-    cfg.test_train_loader.dataset.transform.transforms.append(augmentor)
+    cfg.test_train_loader.dataset.add_augmentation(1, augmentor)
     cls.train_and_evaluate(autoaug=True, modules=(augmentor, p_optimizer))
 
     # model save
