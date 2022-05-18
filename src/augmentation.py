@@ -11,6 +11,8 @@ from augparams import Projector
 from aug_operations import apply_augment
 from networks.nets import LeNet, AlexCifarNet
 
+from utils import tensor_to_pil, concat_row
+
 
 # Return Auto-Augmentation Module and Auto-Aug Parameter Optimizer
 # Args: device(str): CPU or CUDA, aug_cfg(Config): configuration for augmentation
@@ -82,12 +84,12 @@ def autoaug_load(device, cfg, aug_cfg):
         f = LeNet(cfg).to(device)
     else:   # CIFAR-10
         f = AlexCifarNet(cfg).to(device)
-    f.load_state_dict(torch.load(path1))
+    f.load_state_dict(torch.load(path1, map_location=device))
 
     # load projector
     path2 = os.path.join(load_dir, 'projector_weights.pth')
     p = Projector(aug_cfg.in_features, 2 * len(aug_cfg.aug_list)).to(device)
-    p.load_state_dict(torch.load(path2))
+    p.load_state_dict(torch.load(path2, map_location=device))
 
     logging.info('AutoAug Module loaded from {}'.format(aug_cfg.load_dir))
 
@@ -153,15 +155,12 @@ class AugModule(nn.Module):
         with torch.no_grad():
             prob, mag = self.get_params(img.to(self.device))
             op_indices = torch.topk(prob, self.k_ops, dim=0)[1]
-            if self.k_ops > 1:
-                aimg = img
-                for idx in op_indices:
-                    mag = perturb_param(mag[idx].item(), self.delta)
-                    aimg = apply_augment(aimg, self.aug_list[idx], mag[idx].item())
-                return aimg
-            else:
-                idx = op_indices
-                return apply_augment(img, self.aug_list[idx], mag[idx].item())
+            aimg = img
+            for idx in op_indices:
+                i = idx.item()
+                m = perturb_param(mag[i].item(), self.delta)
+                aimg = apply_augment(aimg, self.aug_list[i], m)
+            return aimg
 
     # return classification result of mixed feature validation image
     # Args: imgs(Tensor): validation batch

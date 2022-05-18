@@ -145,6 +145,10 @@ class Classifier:
         for epoch in range(1, self.epochs + 1):
             self.train()
 
+            if do_test and (epoch % test_intv == 0):
+                loss, accu = self.test()
+                logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
+
             # explore auto-aug policy
             if do_autoaug and (epoch % ex_intv == 0):
                 if not aug_module.loaded:
@@ -152,10 +156,6 @@ class Classifier:
                     autoaug_update(device, aug_module, p_optimizer, cfg.val_loader)
                     ex_t = time.time() - ex_t0
                     logging.info('Epoch: {:4d}, Search time: {:.2f}'.format(epoch, ex_t))
-
-            if do_test and (epoch % test_intv == 0):
-                loss, accu = self.test()
-                logging.info('Epoch {}: Average Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(epoch, loss, accu))
             # end of for loop
 
         train_t = time.time() - train_t0

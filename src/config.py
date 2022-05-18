@@ -92,7 +92,7 @@ def search_cfg(cfg):
     data = cfg.DATA_SET.name
 
     # search size
-    if cfg.DATA_SET.raw == "raw":
+    if cfg.DATA_SET.source == "raw":
         if data == 'CIFAR-10':
             cfg.DATA_SET.search_size = 45000    # (45744 / 50000)
         else:   # data == 'MNIST'
@@ -102,7 +102,7 @@ def search_cfg(cfg):
         cfg.DATA_SET.search_size = int(n_steps * 0.9) * cfg.DISTILL.num_per_class * cfg.DATA_SET.num_classes
 
     # search_batch_size
-    if cfg.EXPLORE.model == 'AlexCifarNet':
+    if cfg.TRAIN.model == 'AlexCifarNet':
         cfg.DATA_SET.search_batch_size = 256
     else:   # model == 'LeNet'
         cfg.DATA_SET.search_batch_size = 512

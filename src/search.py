@@ -46,9 +46,9 @@ def main(cfg):
         search_dataset = StepDataset(cfg.DATA_SET.num_classes, steps[train_n_step:])
 
     cfg.test_train_loader = DataLoader(train_dataset, cfg.DATA_SET.batch_size, shuffle=True, drop_last=True,
-                                  pin_memory=True, num_workers=n_workers)
+                                       pin_memory=True, num_workers=n_workers)
     cfg.val_loader = DataLoader(search_dataset, cfg.DATA_SET.search_batch_size, shuffle=True, drop_last=True,
-                                   pin_memory=True, num_workers=n_workers)
+                                pin_memory=True, num_workers=n_workers)
     logging.info('Load train dataset: %s, size: %d', cfg.DATA_SET.name, len(train_dataset))
     logging.info('Load search dataset: %s, size: %d', cfg.DATA_SET.name, len(search_dataset))
 
@@ -58,17 +58,17 @@ def main(cfg):
     ])
     if is_MNIST:
         test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr_norm, download=True)
-    else:   # CIFAR-10
+    else:  # CIFAR-10
         test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr_norm, download=True)
     cfg.test_loader = DataLoader(test_dataset, cfg.DATA_SET.batch_size, shuffle=True, num_workers=n_workers,
                                  pin_memory=True)
     logging.info('Load test dataset: %s, size: %d', cfg.DATA_SET.name, len(test_dataset))
 
     # model
-    extractor = Classifier(cfg)
-    augmentor, p_optimizer = autoaug_creator(device, cfg.TAUG, extractor)
+    cls = Classifier(cfg)
+    augmentor, p_optimizer = autoaug_creator(device, cfg.TAUG, cls.model)
     cfg.test_train_loader.dataset.transform.transforms.append(augmentor)
-    extractor.train_and_evaluate(autoaug=True, modules=(augmentor, p_optimizer))
+    cls.train_and_evaluate(autoaug=True, modules=(augmentor, p_optimizer))
 
     # model save
     if cfg.TAUG.save:
