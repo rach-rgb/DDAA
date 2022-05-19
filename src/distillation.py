@@ -202,6 +202,8 @@ class Distiller:
         augmentor = None
         p_optimizer = None
         exp_intv = unreach_ep
+        start_aug = cfg.RAUG.start_ep
+        aug_online = cfg.RAUG.online
         do_autoaug = True if self.do_raug and cfg.RAUG.aug_type == 'Auto' else False
         if self.do_raug:
             if cfg.RAUG.aug_type == 'Random':
@@ -213,10 +215,11 @@ class Distiller:
                 else:
                     augmentor, p_optimizer = aug.autoaug_creator(device, cfg.RAUG, task_models[0])
                 exp_intv = cfg.RAUG.search_intv
+                if not aug_online:
+                    cfg.train_loader.dataset.augment_dataset(augmentor, 3)
             else:
                 logging.error("{} Augmentation for raw data not implemented".format(cfg.RAUG.aug_type))
                 raise NotImplementedError
-            cfg.train_loader.dataset.add_augmentation(1, augmentor) # Tensor -> Aug -> Normalize
 
         if self.do_daug:
             logging.error("Augmentation for distilled data during distillation not implemented")
@@ -229,6 +232,9 @@ class Distiller:
 
             if it == 0 and epoch != 0:
                 self.scheduler.step()
+
+            if self.do_raug and aug_online and epoch == start_aug and it == 0:
+                cfg.train_loader.dataset.add_augmentation(1, augmentor)  # Tensor -> Aug -> Normalize
 
             # explore auto-aug strategy
             if do_autoaug and epoch % exp_intv == 0 and it == 0 and epoch != 0:

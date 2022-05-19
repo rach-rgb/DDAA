@@ -12,6 +12,7 @@ from aug_operations import apply_augment
 from networks.nets import LeNet, AlexCifarNet
 from transform import valid_after_MNIST, valid_after_CIFAR
 
+from utils import tensor_to_pil, concat_row
 
 # Return Auto-Augmentation Module and Auto-Aug Parameter Optimizer
 # Args: device(str): CPU or CUDA, aug_cfg(Config): configuration for augmentation

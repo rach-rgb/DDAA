@@ -29,12 +29,13 @@ class RawDataset(data.Dataset):
         self.data = x  # Tensor [num_of_data, (C), H, W]
         self.targets = y  # Tensor [num_of_data]
 
+        self.do_transform = True
         self.transform = transform
 
     def __getitem__(self, idx):
         img, target = self.data[idx], int(self.targets[idx])
 
-        if self.transform is not None:
+        if self.transform is not None and self.do_transform:
             img = self.transform(img)
 
         return img, target
@@ -47,6 +48,29 @@ class RawDataset(data.Dataset):
     # augmentor(AugModule)
     def add_augmentation(self, index, augmentor):
         self.transform.transforms.insert(index, augmentor)
+
+    def augment_dataset(self, augmentor, count=3):
+        logging.info("Augment Image %d times", count)
+        tr_pre = self.transform.transforms[0]  # ToTensor
+        tr_after = self.transform.transforms[1]  # Normalize
+
+        x = []
+        y = []
+        with torch.no_grad():
+            for img, target in zip(self.data, self.targets):
+                tensor_img = tr_pre(img)
+                for i in range(count+1):
+                    if i == 0:  # original image
+                        aug_img = tensor_img
+                    else:
+                        aug_img = augmentor.auto_exploit(tensor_img)
+                    x.append(tr_after(aug_img))
+                    y.append(target)
+
+        self.data = torch.stack(x, dim=0)
+        if self.data.shape[1] == 1:   # Channel = 1
+            self.data = self.data.squeeze(1)
+        self.targets = torch.stack(y, dim=0)
 
     def get_subset(self, index, x, y):
         mask = np.zeros(len(y), dtype=bool)
@@ -110,3 +134,9 @@ class StepDataset(data.Dataset):
 
     def __len__(self):
         return len(self.data)
+
+    # add augmentor module
+    # Args: index(int): 1(before normalize), 2(after normalize)
+    # augmentor(AugModule)
+    def add_augmentation(self, index, augmentor):
+        self.transform.transforms.append(augmentor)

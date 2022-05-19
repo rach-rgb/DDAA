@@ -34,7 +34,7 @@ valid_after_CIFAR = transforms.Compose([
 ])
 
 test_MNIST = transforms.Compose([
-    ToFloatTensor(),
+    transforms.ToTensor(),
     transforms.Normalize(0.1307, 0.3081)
 ])
 
