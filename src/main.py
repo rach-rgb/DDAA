@@ -1,18 +1,15 @@
-import sys
-import logging
-from os import path
+import os, sys, logging
 
 import torch
 import torch.utils.data as data
 from torchvision import datasets
-from sklearn.model_selection import train_test_split
 
 import transform as tr
 from config import Config
 from distillation import Distiller
 from classification import Classifier
-from dataset import RawDataset, StepDataset
 from utils import load_results, save_results
+from dataset import StepDataset, get_dataset
 from augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
 
 
@@ -25,36 +22,19 @@ def main(cfg):
     # construct dataset loader
     batch_size = cfg.DATA_SET.batch_size
     num_workers = cfg.DATA_SET.num_workers
-    is_MNIST = cfg.DATA_SET.name == 'MNIST'
 
-    if is_MNIST:
-        total_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
-        tr_train = tr.train_MNIST
-        tr_valid = tr.test_MNIST
-    else:   # CIFAR-10
-        total_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=True, download=True)
-        tr_train = tr.train_CIFAR
-        tr_valid = tr.test_CIFAR
-
-    if cfg.DATA_SET.train_split:
-        train_idx, val_idx, _, _ = train_test_split(range(len(total_dataset)), total_dataset.targets,
-                                                    stratify=total_dataset.targets, test_size=cfg.DATA_SET.val_size)
-        # validation loader
-        val_dataset = RawDataset(cfg, total_dataset, mess=False, index=val_idx, transform=tr_valid)
-        cfg.val_loader = data.DataLoader(val_dataset, batch_size, shuffle=True, num_workers=num_workers)
-        logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, len(val_dataset))
-        # train loader
-        train_dataset = RawDataset(cfg, total_dataset, mess=True, index=train_idx, transform=tr_train)
-    else:
-        train_dataset = RawDataset(cfg, total_dataset, mess=True, transform=tr_train)
-
+    # train loader, test loader
+    train_dataset, val_dataset = get_dataset(cfg)
     cfg.train_loader = data.DataLoader(train_dataset, batch_size,
                                        shuffle=True, num_workers=num_workers, pin_memory=True)
     logging.info('Load train dataset: %s, size: %d, class imbalance: %.2f, label noise: %.2f',
                  cfg.DATA_SET.name, len(train_dataset), cfg.DATA_SET.imbalance, cfg.DATA_SET.noise)
+    if val_dataset is not None:
+        cfg.val_loader = data.DataLoader(val_dataset, batch_size, shuffle=True, num_workers=num_workers)
+        logging.info('Load validation dataset: %s, size: %d', cfg.DATA_SET.name, len(val_dataset))
 
     # test loader
-    if is_MNIST:
+    if cfg.DATA_SET.name == 'MNIST':
         test_dataset = datasets.MNIST(cfg.DATA_SET.root, train=False, transform=tr.test_MNIST, download=True)
     else:   # CIFAR-10
         test_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=False, transform=tr.test_CIFAR, download=True)
@@ -118,6 +98,6 @@ if __name__ == '__main__':
         else:
             config_dir = sys.argv[1]
         torch.multiprocessing.set_start_method('spawn')
-        main(Config.from_yaml(path.join('../configs/', config_dir)))
+        main(Config.from_yaml(os.path.join('../configs/', config_dir)))
     except Exception:
         logging.exception("Terminate by error")

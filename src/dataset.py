@@ -1,10 +1,47 @@
+import os
 import logging
+from pathlib import Path
 
 import torch
 import numpy as np
 import torch.utils.data as data
-from torchvision import transforms
+from torchvision import transforms, datasets
+from sklearn.model_selection import train_test_split
+
+import transform as tr
 from utils import step_to_tensor
+
+
+def get_dataset(cfg):
+    is_MNIST = cfg.DATA_SET.name == 'MNIST'
+
+    if is_MNIST:
+        total_dataset = datasets.MNIST(cfg.DATA_SET.root, train=True, download=True)
+        tr_train = tr.train_MNIST
+        tr_valid = tr.test_MNIST
+    else:   # CIFAR-10
+        total_dataset = datasets.CIFAR10(cfg.DATA_SET.root, train=True, download=True)
+        tr_train = tr.train_CIFAR
+        tr_valid = tr.test_CIFAR
+
+    if cfg.DATA_SET.source == 'load':
+        output_dir = os.path.join(Path(os.getcwd()).parent, 'output', 'augment-' + cfg.DATA_SET.name)
+
+        data_path = os.path.join(output_dir, 'data')
+        target_path = os.path.join(output_dir, 'target')
+
+        train_dataset = AugDataset(data_path, target_path)
+        val_dataset = None
+    elif cfg.DATA_SET.train_split:  # source == Raw
+        train_idx, val_idx, _, _ = train_test_split(range(len(total_dataset)), total_dataset.targets,
+                                                    stratify=total_dataset.targets, test_size=cfg.DATA_SET.val_size)
+        train_dataset = RawDataset(cfg, total_dataset, mess=True, index=train_idx, transform=tr_train)
+        val_dataset = RawDataset(cfg, total_dataset, mess=False, index=val_idx, transform=tr_valid)
+    else:
+        train_dataset = RawDataset(cfg, total_dataset, mess=True, transform=tr_train)
+        val_dataset = None
+
+    return train_dataset, val_dataset
 
 
 # create custom dataset
@@ -50,14 +87,16 @@ class RawDataset(data.Dataset):
         self.transform.transforms.insert(index, augmentor)
 
     def augment_dataset(self, augmentor, count=3):
-        logging.info("Augment Image %d times", count)
         tr_pre = self.transform.transforms[0]  # ToTensor
         tr_after = self.transform.transforms[1]  # Normalize
 
         x = []
         y = []
         with torch.no_grad():
-            for img, target in zip(self.data, self.targets):
+            for idx, (img, target) in enumerate(zip(self.data, self.targets)):
+                if idx % (len(self.data) / 10) == 0:
+                    logging.info("augment: %d images", idx)
+
                 tensor_img = tr_pre(img)
                 for i in range(count+1):
                     if i == 0:  # original image
@@ -140,3 +179,26 @@ class StepDataset(data.Dataset):
     # augmentor(AugModule)
     def add_augmentation(self, index, augmentor):
         self.transform.transforms.append(augmentor)
+
+
+# load augmented dataset
+class AugDataset(data.Dataset):
+    def __init__(self, img, target):
+        self.img = img  # img path
+        self.target = target  # mask path
+        self.len = len(os.listdir(self.img))
+
+    def __getitem__(self, index):
+        ls_img = sorted(os.listdir(self.img))
+        ls_mask = sorted(os.listdir(self.target))
+
+        img_file_path = os.path.join(self.img, ls_img[index])
+        img_tensor = torch.load(img_file_path)
+
+        mask_file_path = os.path.join(self.target, ls_mask[index])
+        mask_tensor = torch.load(mask_file_path)
+
+        return img_tensor, mask_tensor
+
+    def __len__(self):
+        return self.len
