@@ -9,7 +9,7 @@ from torchvision import transforms, datasets
 from sklearn.model_selection import train_test_split
 
 import transform as tr
-from utils import step_to_tensor
+from src.utils import step_to_tensor
 
 
 def get_dataset(cfg):
@@ -27,11 +27,9 @@ def get_dataset(cfg):
     if cfg.DATA_SET.source == 'load':
         output_dir = os.path.join(Path(os.getcwd()).parent, 'output', 'augment-' + cfg.DATA_SET.name)
 
-        data_path = os.path.join(output_dir, 'data')
-        target_path = os.path.join(output_dir, 'target')
-
-        train_dataset = AugDataset(data_path, target_path)
+        train_dataset = AugDataset(output_dir)
         val_dataset = None
+        logging.info("Train dataset loaded from %s", output_dir)
     elif cfg.DATA_SET.train_split:  # source == Raw
         train_idx, val_idx, _, _ = train_test_split(range(len(total_dataset)), total_dataset.targets,
                                                     stratify=total_dataset.targets, test_size=cfg.DATA_SET.val_size)
@@ -86,30 +84,36 @@ class RawDataset(data.Dataset):
     def add_augmentation(self, index, augmentor):
         self.transform.transforms.insert(index, augmentor)
 
-    def augment_dataset(self, augmentor, count=3):
+    def save_augment_dataset(self, count, augmentor, output_dir, log_intv=10):
         tr_pre = self.transform.transforms[0]  # ToTensor
         tr_after = self.transform.transforms[1]  # Normalize
+        l = len(self.data)
 
-        x = []
-        y = []
         with torch.no_grad():
+            data = []
             for idx, (img, target) in enumerate(zip(self.data, self.targets)):
-                if idx % (len(self.data) / 10) == 0:
-                    logging.info("augment: %d images", idx)
-
                 tensor_img = tr_pre(img)
                 for i in range(count+1):
                     if i == 0:  # original image
                         aug_img = tensor_img
                     else:
                         aug_img = augmentor.auto_exploit(tensor_img)
-                    x.append(tr_after(aug_img))
-                    y.append(target)
+                    aug_img = tr_after(aug_img)
+                    data.append((aug_img, target))
 
-        self.data = torch.stack(x, dim=0)
-        if self.data.shape[1] == 1:   # Channel = 1
-            self.data = self.data.squeeze(1)
-        self.targets = torch.stack(y, dim=0)
+                if idx % (l / log_intv) == 0 and idx != 0:
+                    # save
+                    batch_idx = int(idx * log_intv / l) - 1
+                    torch.save(data, os.path.join(output_dir, 'batch{}'.format(batch_idx)))
+                    logging.info("progress: %d / %d",  batch_idx, log_intv)
+                    del data
+                    data = []
+
+            # save last batch
+            batch_idx = log_intv - 1
+            torch.save(data, os.path.join(output_dir, 'batch{}'.format(batch_idx)))
+            logging.info("progress: %d / %d", batch_idx, log_intv)
+            del data
 
     def get_subset(self, index, x, y):
         mask = np.zeros(len(y), dtype=bool)
@@ -183,22 +187,27 @@ class StepDataset(data.Dataset):
 
 # load augmented dataset
 class AugDataset(data.Dataset):
-    def __init__(self, img, target):
-        self.img = img  # img path
-        self.target = target  # mask path
-        self.len = len(os.listdir(self.img))
+    def __init__(self, data_path):
+        self.data, self.targets = AugDataset.load_augment_dataset(data_path)
 
-    def __getitem__(self, index):
-        ls_img = sorted(os.listdir(self.img))
-        ls_mask = sorted(os.listdir(self.target))
-
-        img_file_path = os.path.join(self.img, ls_img[index])
-        img_tensor = torch.load(img_file_path)
-
-        mask_file_path = os.path.join(self.target, ls_mask[index])
-        mask_tensor = torch.load(mask_file_path)
-
-        return img_tensor, mask_tensor
+    def __getitem__(self, idx):
+        return self.data[idx], int(self.targets[idx])
 
     def __len__(self):
-        return self.len
+        return len(self.data)
+
+    @staticmethod
+    def load_augment_dataset(data_path):
+        x = []
+        y = []
+
+        batch_list = sorted(os.listdir(data_path))
+        for idx in range(len(batch_list)):
+            data = torch.load(os.path.join(data_path, batch_list[idx]))
+            for (image, target) in data:
+                x.append(image)
+                y.append(target)
+
+        x = torch.stack(x, dim=0)
+        y = torch.tensor(y)
+        return x, y

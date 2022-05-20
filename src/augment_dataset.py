@@ -6,13 +6,13 @@ from pathlib import Path
 import torch
 from torchvision import datasets
 
-import transform as tr
 from config import Config
-from dataset import RawDataset
-from augmentation import AugModule, autoaug_load
+import dataset.transform as tr
+from dataset.dataset import RawDataset
+from augmentation.augmentation import AugModule, autoaug_load
 
 
-def main(cfg):
+def main(cfg, count):
     # device
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
@@ -40,34 +40,29 @@ def main(cfg):
         assert cfg.TAUG.load  # use pretrained augment policy
         augmentor, p_optimizer = autoaug_load(device, cfg, cfg.TAUG)
 
-    count = 2
-    train_dataset.augment_dataset(augmentor, count)
-    logging.info("Augment Dataset %d times", count)
-
     output_dir = os.path.join(Path(os.getcwd()).parent, 'output', 'augment-' + cfg.DATA_SET.name)
 
     if not os.path.exists(output_dir):
-        # Create a new directory because it does not exist
         os.makedirs(output_dir)
-        os.makedirs(os.path.join(output_dir, 'data'))
-        os.makedirs(os.path.join(output_dir, 'target'))
 
-    for i, data in enumerate(train_dataset):
-        torch.save(data[0], os.path.join(output_dir, 'data', 'data{}'.format(i)))
-        torch.save(data[1], os.path.join(output_dir, 'target', 'target{}'.format(i)))
-    logging.info("Augmented dataset stored at %s", str(output_dir))
+    train_dataset.save_augment_dataset(count, augmentor, output_dir)
+    logging.info("%s augmented %d times stored at %s", cfg.DATA_SET.name, count, str(output_dir))
 
 
 if __name__ == '__main__':
-    assert len(sys.argv) == 2
+    assert len(sys.argv) >= 2
     cfg_file = sys.argv[1]
     log_file = cfg_file.split('.')[0] + '-augment-log.txt'
+    if len(sys.argv) >= 3:
+        count = sys.argv[2]
+    else:
+        count = 3
 
     logging.basicConfig(filename=os.path.join('../output/', log_file), level=logging.INFO)
     logging.getLogger().addHandler(logging.StreamHandler())
 
     try:
         torch.multiprocessing.set_start_method('spawn')
-        main(Config.from_yaml(os.path.join('../configs/', cfg_file)))
+        main(Config.from_yaml(os.path.join('../configs/', cfg_file)), count)
     except Exception:
         logging.exception("Terminate by error")

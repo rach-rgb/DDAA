@@ -4,13 +4,13 @@ import torch
 import torch.utils.data as data
 from torchvision import datasets
 
-import transform as tr
 from config import Config
+import dataset.transform as tr
 from distillation import Distiller
 from classification import Classifier
 from utils import load_results, save_results
-from dataset import StepDataset, get_dataset
-from augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
+from dataset.dataset import StepDataset, get_dataset
+from augmentation.augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
 
 
 def main(cfg):

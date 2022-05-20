@@ -7,12 +7,12 @@ from torchvision import datasets
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 
-import transform as tr
+import dataset.transform as tr
 from utils import load_results
 from config import Config, search_cfg
 from classification import Classifier
-from dataset import RawDataset, StepDataset
-from augmentation import autoaug_creator, autoaug_save
+from dataset.dataset import RawDataset, StepDataset
+from augmentation.augmentation import autoaug_creator, autoaug_save
 
 
 def main(cfg):

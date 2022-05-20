@@ -5,9 +5,9 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-import augmentation as aug
 from utils import visualize
 from loss_model import get_loss
+import augmentation.augmentation as aug
 from networks.nets import LeNet, AlexCifarNet
 
 

@@ -6,8 +6,8 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
 
 from loss_model import get_loss
-from augmentation import autoaug_update
 from networks.nets import LeNet, AlexCifarNet
+from augmentation.augmentation import autoaug_update
 
 
 # Simple classifier to evaluate dataset
