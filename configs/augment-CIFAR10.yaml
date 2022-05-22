@@ -1,0 +1,21 @@
+DATA_SET:
+  name: 'CIFAR-10' # MNIST or CIFAR-10
+  root: '../data'
+TAUG:  # Train Data Augment
+  # features
+  load: true
+  save: false
+  load_dir: 'output'
+  output_dir: 'output'
+  # augmentation type
+  name: 'CIFAR-10'
+  aug_type: 'Auto'
+  random_apply: True
+  # hyper parameters
+  search_intv: 3
+  p_lr: 0.001
+  p_decay_factor: 0.003
+  k_ops: 2
+  temp: 3.0
+  delta: 0.3
+

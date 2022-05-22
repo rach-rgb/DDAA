@@ -1,0 +1,79 @@
+DATA_SET:
+  name: 'CIFAR-10' # MNIST or CIFAR-10
+  source: 'raw'
+  root: '../data'
+  # train loader
+  batch_size: 1024
+  num_workers: 4
+  # dataset noise
+  imbalance: 1
+  noise: 0
+  # validation set
+  train_split: False # need to specify val_size
+  val_size: 10000
+TASK:
+  distill: True
+  train: False
+  test: False
+DISTILL:
+  load: False
+  load_dir: 'output'
+  # features
+  validation: False
+  raw_augment: True
+  dd_augment: False
+  save_output: True
+  save_vis_output: False
+  output_dir: 'output'
+  log_intv: 5  # log training loss every log_intv epoch
+  val_intv: 30 # calculate validation loss every val_intv epoch
+  vis_intv: 50  # export visualized output every vis_intv epoch
+  # hyperparameters of outer loop
+  epochs: 200
+  decay_epochs: 40
+  decay_factor: 0.5
+  lr: 0.01
+  # hyperparameters of inner loop
+  d_steps: 10
+  d_epochs: 3
+  d_lr: 0.001
+  num_per_class: 1
+  # task model
+  model: 'AlexCifarNet'  # LeNet or AlexCifarNet
+  sample_nets: 1
+  init: 'xavier'
+  init_param: 1.0
+  # loss model
+  rloss_crit: 'CE'  # CE, BF
+  dloss_crit: 'CE'  # only CE
+TRAIN:
+  # Train Dataset
+  augment: False
+  use_full_steps: false  # use entire steps for training
+  # Hyperparameter
+  epochs: 30
+  lr: 1.0
+  decay_epochs: 1
+  decay_factor: 0.7
+  test_intv: 5
+  # Task Model
+  model: 'LeNet'
+  # Loss Model
+  tloss_crit: 'CE'  # default: 'CE'
+RAUG:  # Raw Data Augment
+  load: True
+  save: False
+  load_dir: 'output'
+  output_dir: 'output'
+  # augmentation type
+  name: 'CIFAR-10'
+  aug_type: 'Auto'
+  random_apply: True
+  start_ep: 0
+  # auto aug parameters
+  search_intv: 3
+  p_lr: 0.001
+  p_decay_factor: 0.003
+  k_ops: 2
+  temp: 3.0
+  delta: 0.3

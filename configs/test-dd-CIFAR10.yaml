@@ -1,0 +1,105 @@
+DATA_SET:
+  name: 'CIFAR-10' # MNIST or CIFAR-10
+  root: '../data'
+  source: 'raw'
+  # train loader
+  batch_size: 1024
+  num_workers: 4
+  # dataset noise
+  imbalance: 1
+  noise: 0
+  # validation set
+  train_split: False # need to specify val_size
+  val_size: 10000
+TASK:
+  distill: True
+  train: True
+  test: True
+DISTILL:
+  load: True
+  load_dir: 'output'
+  # features
+  validation: False
+  raw_augment: True
+  dd_augment: False
+  save_output: False
+  save_vis_output: False
+  output_dir: 'output'
+  log_intv: 5  # log training loss every log_intv epoch
+  val_intv: 30 # calculate validation loss every val_intv epoch
+  vis_intv: 10  # export visualized output every vis_intv epoch
+  # hyperparameters of outer loop
+  epochs: 30
+  decay_epochs: 40
+  decay_factor: 0.5
+  lr: 0.01
+  # hyperparameters of inner loop
+  d_steps: 10
+  d_epochs: 3
+  d_lr: 0.02
+  num_per_class: 1
+  # task model
+  model: 'LeNet'  # LeNet or AlexCifarNet
+  sample_nets: 1
+  init: 'xavier'
+  init_param: 1.0
+  # loss model
+  rloss_crit: 'CE'  # CE, BF
+  dloss_crit: 'CE'  # only CE
+TRAIN:
+  # Train Dataset
+  augment: False
+  use_full_steps: False  # use entire steps for training
+  # Task Model
+  model: 'AlexCifarNet'
+  optimizer: 'Adadelta' # Adadelta or SGD
+  scheduler: 'StepLR' # StepLR or None
+  tloss_crit: 'CE'  # default: 'CE'
+  # Hyperparameter
+  epochs: 50
+  lr: 0.02
+  SGD:
+    weight_decay: 0.0005
+    momentum: 0.9
+  StepLR:
+    decay_epochs: 40
+    decay_factor: 0.5
+  # features
+  test_intv: 1
+RAUG:  # Raw Data Augment
+  load: True
+  save: False
+  load_dir: 'output'
+  output_dir: 'output'
+  # augmentation type
+  name: 'MNIST'
+  aug_type: 'Auto'
+  random_apply: True
+  # auto aug parameters
+  search_intv: 1
+  p_lr: 0.02
+  p_decay_factor: 0.003
+  # features
+DAUG: # Distilled Data Augment
+  # augmentation type
+  name: 'MNIST'
+  aug_type: 'Random'
+  random_apply: True
+  # auto aug parameters
+  search_intv: 1
+  p_lr: 0.02
+  p_decay_factor: 0.003
+TAUG:  # Train Data Augment
+  # features
+  load: true
+  save: false
+  load_dir: 'output'
+  output_dir: 'output'
+  # augmentation type
+  name: 'CIFAR-10'
+  aug_type: 'Auto'
+  random_apply: True
+  # auto aug parameters
+  search_intv: 1
+  p_lr: 0.02
+  p_decay_factor: 0.003

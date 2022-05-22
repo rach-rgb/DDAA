@@ -132,6 +132,10 @@ dmypy.json
 .idea/
 data/
 src/unused/
-configs/
+configs/**
+!configs/search/explore-CIFAR10.yaml
+!configs/dd-auto-CIFAR10.yaml
+!configs/test-dd-CIFAR10.yaml
+!configs/augment-CIFAR10.yaml
 output/
 trials/
