@@ -37,6 +37,6 @@ Postech CSED499I-02 source code and sample
 
 ### Results
 - Dataset Distillation w/ Auto-Augmentation
-- Dataset Distillation w/ Class-balanced Loss
-![Cross Entropy, Class Balanced Focal Loss, Class Balanced Cross Entropy를 사용하여 Class Imbalance한 Dataset에 Distillation을 적용했을 때 생성한 Distilled Dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/table.png"Dataset Distillation w/ Class Balanced Loss for CIFAR-10")
+- Dataset Distillation w/ Class-balanced Loss  
+![Cross Entropy, Class Balanced Focal Loss, Class Balanced Cross Entropy를 사용하여 Class Imbalance한 Dataset에 Distillation을 적용했을 때 생성한 Distilled Dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/table.png "Dataset Distillation w/ Class Balanced Loss for CIFAR-10")
 
