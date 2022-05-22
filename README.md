@@ -33,6 +33,8 @@ Postech CSED499I-02 source code and sample
 `python main.py dd-auto-CIFAR10.yaml`
 - Evaluate Distilled Dataset
 `python main.py test-dd-CIFAR10.yaml`
+- Store Augmented Dataset
+`python augment_dataset.py augment-CIFAR10.yaml`
 
 
 ### Results
