@@ -7,12 +7,12 @@ from torchvision import datasets
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 
-import dataset.transform as tr
+import custom_dataset.transform as tr
 from utils import load_results
 from config import Config, search_cfg
 from classification import Classifier
-from dataset.dataset import RawDataset, StepDataset
-from augmentation.augmentation import autoaug_creator, autoaug_save
+from custom_dataset.dataset import RawDataset, StepDataset
+from custom_augment.augmentation import autoaug_creator, autoaug_save
 
 
 def main(cfg):
@@ -44,14 +44,14 @@ def main(cfg):
         search_dataset = RawDataset(cfg, total_dataset, mess=False, index=search_idx, transform=tr_search_pre)
     else:  # distilled dataset
         steps = load_results(cfg)[:cfg.DISTILL.d_steps]
-        train_n_step = cfg.DATA_SET.search_size / cfg.DISTLL.num_per_class / cfg.DATA_SET.num_classes
+        train_n_step = int(cfg.DATA_SET.search_size / cfg.DISTILL.num_per_class / cfg.DATA_SET.num_classes)
         train_dataset = StepDataset(cfg.DATA_SET.num_classes, steps[:train_n_step])
         search_dataset = StepDataset(cfg.DATA_SET.num_classes, steps[train_n_step:])
 
-    cfg.test_train_loader = DataLoader(train_dataset, cfg.DATA_SET.batch_size, shuffle=True, drop_last=True,
-                                       pin_memory=True, num_workers=n_workers)
-    cfg.val_loader = DataLoader(search_dataset, cfg.DATA_SET.search_batch_size, shuffle=True, drop_last=True,
-                                pin_memory=True, num_workers=n_workers)
+    cfg.test_train_loader = DataLoader(train_dataset, cfg.DATA_SET.batch_size, shuffle=True, drop_last=False,
+                                       num_workers=n_workers)
+    cfg.val_loader = DataLoader(search_dataset, cfg.DATA_SET.search_batch_size, shuffle=True, drop_last=False,
+                                num_workers=n_workers)
     logging.info('Load train dataset: %s, size: %d', cfg.DATA_SET.name, len(train_dataset))
     logging.info('Load search dataset: %s, size: %d', cfg.DATA_SET.name, len(search_dataset))
 

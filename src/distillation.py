@@ -7,8 +7,8 @@ import torch.nn.functional as F
 
 from utils import visualize
 from loss_model import get_loss
-import augmentation.augmentation as aug
-from networks.nets import LeNet, AlexCifarNet
+import custom_augment.augmentation as aug
+from custom_networks.nets import LeNet, AlexCifarNet
 
 
 # Dataset Distillation Module
@@ -39,7 +39,7 @@ class Distiller:
                                                    gamma=cfg.DISTILL.decay_factor)
 
         # focal loss parameters
-        if cfg.DISTILL.rloss_crit == 'BF' or cfg.DISTILL.rloss_crit == 'BCE':
+        if cfg.DISTILL.rloss_crit == 'BF' or 'BCE' in cfg.DISTILL.rloss_crit:
             self.info = (cfg.device,
                          cfg.train_loader.dataset.n_classes, cfg.train_loader.dataset.n_per_classes)
         elif cfg.DISTILL.rloss_crit == 'CE':

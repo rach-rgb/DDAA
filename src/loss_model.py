@@ -15,9 +15,9 @@ def get_loss(output, label, ty, reduction='mean', params=None):
     elif ty == 'BF':  # class balanced focal loss
         device, n_classes, n_per_classes = params
         return CB_loss(label, output, n_per_classes, n_classes, 'FL', device)
-    elif ty == 'BCE':  # class blanced cross entropy
+    elif 'BCE' in ty:  # class blanced cross entropy
         device, n_classes, n_per_classes = params
-        return CB_loss(label, output, n_per_classes, n_classes, 'BCE', device)
+        return CB_loss(label, output, n_per_classes, n_classes, ty, device)
     else:
         logging.error("Loss Model {} not implemented".format(ty))
         raise NotImplementedError
@@ -41,7 +41,8 @@ def focal_loss(labels, logits, alpha, gamma):
     return fl
 
 
-def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, device, beta=0.99, gamma=1.0):
+# class balanced loss
+def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, device, beta=0.9999, gamma=1.0):
     effective_num = 1.0 - np.power(beta, samples_per_cls)
     weights = (1.0 - beta) / np.array(effective_num)
     weights = weights / np.sum(weights) * no_of_classes
@@ -57,5 +58,9 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, device, b
 
     if loss_type == "FL":
         return focal_loss(labels_one_hot, logits, weights, gamma)
-    elif loss_type == "BCE":
+    elif loss_type == "BCE-sig":
         return F.binary_cross_entropy_with_logits(input=logits, target=labels_one_hot, weight=weights)
+    elif loss_type == "BCE-soft":
+        pred = logits.softmax(dim=1)
+        return F.binary_cross_entropy(input=pred, target=labels_one_hot, weight=weights)
+

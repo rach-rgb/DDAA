@@ -8,10 +8,26 @@ import torch.utils.data as data
 from torchvision import transforms, datasets
 from sklearn.model_selection import train_test_split
 
-import transform as tr
 from src.utils import step_to_tensor
+import src.custom_dataset.transform as tr
 
 
+# Terminal
+# import os, sys, logging
+# from pathlib import Path
+#
+# import torch
+# import numpy as np
+# import torch.utils.data as data
+# from torchvision import transforms, datasets
+# from sklearn.model_selection import train_test_split
+#
+# sys.path.insert(0, '../src')
+# import custom_dataset.transform as tr
+# from utils import step_to_tensor
+
+# return dataset
+# Args: cfg(Config)
 def get_dataset(cfg):
     is_MNIST = cfg.DATA_SET.name == 'MNIST'
 
@@ -84,6 +100,9 @@ class RawDataset(data.Dataset):
     def add_augmentation(self, index, augmentor):
         self.transform.transforms.insert(index, augmentor)
 
+    # store augmented dataset
+    # Args: count(int): how many times to augment, output_dir(string): directory to store augmented images
+    # log_intv(int): interval to report progress
     def save_augment_dataset(self, count, augmentor, output_dir, log_intv=10):
         tr_pre = self.transform.transforms[0]  # ToTensor
         tr_after = self.transform.transforms[1]  # Normalize
@@ -115,12 +134,14 @@ class RawDataset(data.Dataset):
             logging.info("progress: %d / %d", batch_idx, log_intv)
             del data
 
+    # make subset of dataset
     def get_subset(self, index, x, y):
         mask = np.zeros(len(y), dtype=bool)
         mask[index] = True
 
         return x[mask], y[mask]
 
+    # apply class imbalance and flipped label
     def make_mess(self, cfg, x, y):
         imbalance_r = cfg.DATA_SET.imbalance
         noise_r = cfg.DATA_SET.noise
@@ -179,13 +200,13 @@ class StepDataset(data.Dataset):
         return len(self.data)
 
     # add augmentor module
-    # Args: index(int): 1(before normalize), 2(after normalize)
+    # Args: index(int): ignore
     # augmentor(AugModule)
     def add_augmentation(self, index, augmentor):
         self.transform.transforms.append(augmentor)
 
 
-# load augmented dataset
+# loaded augmented dataset
 class AugDataset(data.Dataset):
     def __init__(self, data_path):
         self.data, self.targets = AugDataset.load_augment_dataset(data_path)

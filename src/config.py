@@ -1,6 +1,5 @@
-import logging
-
 import yaml
+import logging
 
 
 # Configuration Instance

@@ -6,8 +6,8 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
 
 from loss_model import get_loss
-from networks.nets import LeNet, AlexCifarNet
-from augmentation.augmentation import autoaug_update
+from custom_networks.nets import LeNet, AlexCifarNet
+from custom_augment.augmentation import autoaug_update
 
 
 # Simple classifier to evaluate dataset
@@ -160,6 +160,6 @@ class Classifier:
 
         train_t = time.time() - train_t0
         if do_test:
-            logging.info('Test Loss: {:.4f}, Accuracy: {:.0f}%'.format(loss, accu))
+            logging.info('Test Loss: {:.4f}, Accuracy: {:.2f}%'.format(loss, accu))
 
         logging.info('Time cost for training: {:.2f}s per one epoch'.format(train_t / self.epochs))

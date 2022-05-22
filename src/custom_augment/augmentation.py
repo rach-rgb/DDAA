@@ -8,9 +8,23 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from src.projection import Projector
-from aug_operations import apply_augment
-from src.networks.nets import LeNet, AlexCifarNet
-from src.dataset.transform import valid_after_MNIST, valid_after_CIFAR
+from src.custom_networks.nets import LeNet, AlexCifarNet
+from src.custom_augment.aug_operations import apply_augment
+from src.custom_dataset.transform import valid_after_MNIST, valid_after_CIFAR
+
+# Terminal
+# from pathlib import Path
+# import os, sys, random, logging
+#
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
+#
+# sys.path.insert(0, '../src')
+# from projection import Projector
+# from custom_networks.nets import LeNet, AlexCifarNet
+# from custom_augment.aug_operations import apply_augment
+# from custom_dataset.transform import valid_after_MNIST, valid_after_CIFAR
 
 
 # Return Auto-Augmentation Module and Auto-Aug Parameter Optimizer

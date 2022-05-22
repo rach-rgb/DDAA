@@ -1,4 +1,3 @@
-# source: https://github.com/SsnL/dataset-distillation/blob/master/utils/io.py
 import os
 import logging
 import warnings
@@ -13,6 +12,7 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 
+# source: https://github.com/SsnL/dataset-distillation/blob/master/utils/io.py
 # load distilled dataset
 def load_results(cfg):
     load_dir = os.path.join(Path(os.getcwd()).parent, cfg.DISTILL.load_dir)

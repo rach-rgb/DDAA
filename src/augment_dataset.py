@@ -7,9 +7,9 @@ import torch
 from torchvision import datasets
 
 from config import Config
-import dataset.transform as tr
-from dataset.dataset import RawDataset
-from augmentation.augmentation import AugModule, autoaug_load
+import custom_dataset.transform as tr
+from custom_dataset.dataset import RawDataset
+from custom_augment.augmentation import AugModule, autoaug_load
 
 
 def main(cfg, count):

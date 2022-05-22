@@ -5,12 +5,12 @@ import torch.utils.data as data
 from torchvision import datasets
 
 from config import Config
-import dataset.transform as tr
+import custom_dataset.transform as tr
 from distillation import Distiller
 from classification import Classifier
 from utils import load_results, save_results
-from dataset.dataset import StepDataset, get_dataset
-from augmentation.augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
+from custom_dataset.dataset import StepDataset, get_dataset
+from custom_augment.augmentation import AugModule, autoaug_creator, autoaug_load, autoaug_save
 
 
 def main(cfg):
@@ -59,7 +59,8 @@ def main(cfg):
                 steps = steps[:cfg.DISTILL.d_steps]
             step_dataset = StepDataset(cfg.DATA_SET.num_classes, steps)
             cfg.test_train_loader = data.DataLoader(step_dataset, 1, shuffle=True, num_workers=1)
-            logging.info('Use distilled dataset with size: %d for training', len(steps))
+            logging.info('Use distilled dataset with size: %d for training',
+                         len(steps * cfg.DATA_SET.num_classes * cfg.DISTILL.num_per_class))
         else:
             cfg.test_train_loader = cfg.train_loader  # use train loader (raw data)
         cls = Classifier(cfg)
