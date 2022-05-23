@@ -164,6 +164,15 @@ class AugModule(nn.Module):
                 aimg = apply_augment(aimg, self.aug_list[i], m)
             return aimg
 
+    # return augmented image
+    # Args: imgs(Tensor[# of images, # of channels, dimension1, dimension2]): list of images
+    def exploit(self, imgs):
+        aug_imgs = []
+        for img in imgs:
+            # torch.no_grad() ?
+            aug_imgs.append(self.auto_exploit(img))
+        return torch.stack(aug_imgs, dim=0)
+
     # return classification result of mixed feature validation image
     # Args: imgs(Tensor): validation batch
     # Returns: output(Tensor): classification result
