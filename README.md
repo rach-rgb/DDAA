@@ -38,7 +38,12 @@ Postech CSED499I-02 source code and sample
 
 
 ### Results
-- Dataset Distillation w/ Auto-Augmentation
+- Dataset Distillation w/ Auto-Augmentation  
+![Train data auto augmentation을 사용하여 dataset distillation을 수행했을 때 생성한 distilled dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/result/4.1.png "Dataset Distillation w/ Auto Augmentation")
 - Dataset Distillation w/ Class-balanced Loss  
-![Cross Entropy, Class Balanced Focal Loss, Class Balanced Cross Entropy를 사용하여 Class Imbalance한 Dataset에 Distillation을 적용했을 때 생성한 Distilled Dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/table.png "Dataset Distillation w/ Class Balanced Loss for CIFAR-10")
-
+  - MNIST  
+![Cross Entropy, Class Balanced Cross Entropy를 사용하여 Class Imbalance한 Dataset에 Distillation을 적용했을 때 생성한 Distilled Dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/result/4.2_MNIST.png "Dataset Distillation w/ Class Balanced Loss for MNIST")
+  - CIFAR  
+![Cross Entropy, Class Balanced Focal Loss, Class Balanced Cross Entropy를 사용하여 Class Imbalance한 Dataset에 Distillation을 적용했을 때 생성한 Distilled Dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/result/4.2_CIFAR.png "Dataset Distillation w/ Class Balanced Loss for CIFAR-10")
+- Utilization of Augmentation  
+![여러가지 실험 설정으로 Distillation을 적용했을 때 생성한 Distilled Dataset의 품질을 평가한 그래프이다.](https://github.com/rach-rgb/DDAA/blob/main/result/4.3_MNIST.png "Dataset Distillation w/ Different Settings")
