@@ -35,11 +35,14 @@ def load_results(cfg):
 
 
 # save distilled dataset
-def save_results(cfg, steps):
+def save_results(cfg, steps, epoch=-1):
     steps = [(d.detach().cpu(), l.detach().cpu(), lr) for (d, l, lr) in steps]
 
     output_dir = os.path.join(Path(os.getcwd()).parent, cfg.DISTILL.output_dir)
-    output = os.path.join(output_dir, 'result.pth')
+    if epoch == -1:     # final result
+        output = os.path.join(output_dir, 'result.pth')
+    else:
+        output = os.path.join(output_dir, 'result' + str(epoch) + '.pth')
 
     torch.save(steps, output)
     logging.info('Distilled data saved to {}'.format(output))

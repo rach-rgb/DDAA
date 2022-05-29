@@ -12,20 +12,6 @@ from src.utils import step_to_tensor
 import src.custom_dataset.transform as tr
 
 
-# Terminal
-# import os, sys, logging
-# from pathlib import Path
-#
-# import torch
-# import numpy as np
-# import torch.utils.data as data
-# from torchvision import transforms, datasets
-# from sklearn.model_selection import train_test_split
-#
-# sys.path.insert(0, '../src')
-# import custom_dataset.transform as tr
-# from utils import step_to_tensor
-
 # return dataset
 # Args: cfg(Config)
 def get_dataset(cfg):

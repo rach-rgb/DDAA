@@ -5,8 +5,8 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-from utils import visualize
 from loss_model import get_loss
+from utils import visualize, save_results
 import custom_augment.augmentation as aug
 from custom_networks.nets import LeNet, AlexCifarNet
 
@@ -19,6 +19,7 @@ class Distiller:
         self.do_raug = cfg.DISTILL.raw_augment  # apply augmentation for raw data
         self.do_daug = cfg.DISTILL.dd_augment  # apply augmentation for distilled data
         self.do_vis = cfg.DISTILL.save_vis_output
+        self.do_ckpt = cfg.DISTILL.save_ckpt
 
         self.dd_step = cfg.DISTILL.d_steps  # data per epoch
         self.dd_epoch = cfg.DISTILL.d_epochs  # number of epoch
@@ -117,7 +118,7 @@ class Distiller:
             torch.autograd.backward(bwd_out, bwd_grad)
 
     # train task model using distilled data
-    def forward(self, model, rdata, rlabel, steps, augmentor):
+    def forward(self, model, rdata, rlabel, steps, augmentor, apply=False):
         raw_loss_crit = self.cfg.DISTILL.rloss_crit
 
         # forward distilled dataset
@@ -128,7 +129,7 @@ class Distiller:
 
         for step, (data, label, lr) in enumerate(steps):
             with torch.enable_grad():
-                if self.do_daug:
+                if self.do_daug and apply:
                     output = model.forward_with_param(augmentor.exploit(data), w)
                 else:
                     output = model.forward_with_param(data, w)
@@ -200,13 +201,17 @@ class Distiller:
         log_intv = cfg.DISTILL.log_intv
         vis_intv = cfg.DISTILL.vis_intv if self.do_vis else unreach_ep
         val_intv = cfg.DISTILL.val_intv if self.do_val else unreach_ep
+        ckpt_intv = cfg.DISTILL.ckpt_intv if self.do_ckpt else unreach_ep
 
         # augmentation
         augmentor = None
         p_optimizer = None
         exp_intv = unreach_ep
+        RAUG_start_ep = unreach_ep
+        DAUG_start_ep = unreach_ep
         do_autoaug = True if self.do_raug and cfg.RAUG.aug_type == 'Auto' else False
         if self.do_raug:
+            RAUG_start_ep = cfg.RAUG.start_ep
             if cfg.RAUG.aug_type == 'Random':
                 augmentor = aug.AugModule(device, cfg.RAUG)
             elif cfg.RAUG.aug_type == 'Auto':
@@ -221,6 +226,7 @@ class Distiller:
                 raise NotImplementedError
 
         if self.do_daug:
+            DAUG_start_ep = cfg.DAUG.start_ep
             if cfg.DAUG.aug_type == 'Random' and augmentor is None:
                 augmentor = aug.AugModule(device, cfg.RAUG)
             elif cfg.DAUG.aug_type == 'Auto' and augmentor is None:
@@ -236,6 +242,9 @@ class Distiller:
                 logging.error("{} Augmentation for distilled data not implemented".format(cfg.RAUG.aug_type))
                 raise NotImplementedError
 
+        if self.do_raug and 0 == RAUG_start_ep:
+            cfg.train_loader.dataset.add_augmentation(1, augmentor)  # Tensor -> Aug -> Normalize
+
         data_t0 = time.time()
         for epoch, it, (rdata, rlabel) in self.prefetch_train_loader_iter():
             rdata, rlabel = rdata.to(device), rlabel.to(device)
@@ -243,9 +252,6 @@ class Distiller:
 
             if it == 0 and epoch != 0:
                 self.scheduler.step()
-
-            if self.do_raug and it == 0:
-                cfg.train_loader.dataset.add_augmentation(1, augmentor)  # Tensor -> Aug -> Normalize
 
             # explore auto-aug strategy
             if do_autoaug and epoch % exp_intv == 0 and it == 0 and epoch != 0:
@@ -266,7 +272,7 @@ class Distiller:
             for mid, model in enumerate(task_models):
                 model.reset2(cfg.DISTILL.init, cfg.DISTILL.init_param)
 
-                rloss, saved = self.forward(model, rdata, rlabel, steps, augmentor)
+                rloss, saved = self.forward(model, rdata, rlabel, steps, augmentor, epoch >= DAUG_start_ep)
                 rlosses.append(rloss.detach())
                 grad_infos.append(self.backward(model, steps, saved))
 
@@ -292,6 +298,10 @@ class Distiller:
 
             del steps, rlosses, grad_infos, grads
 
+            # add raw data augmentation
+            if self.do_raug and epoch + 1 == RAUG_start_ep and it == max_it:
+                cfg.train_loader.dataset.add_augmentation(1, augmentor)  # Tensor -> Aug -> Normalize
+
             # save visualized intermediate result
             if self.do_vis and epoch % vis_intv == 0 and it == max_it and epoch != 0:
                 logging.info("Epoch: {:4d}: save visualized result".format(epoch))
@@ -313,6 +323,12 @@ class Distiller:
                     avg_loss = l / n_subnets
                     avg_accu = avg_accu / n_subnets
                     logging.info("Average loss: {:.4f}, average accuracy: {:.0f}".format(avg_loss, avg_accu))
+
+            # checkpoint
+            if self.do_ckpt and epoch % ckpt_intv == 0 and it == max_it and epoch != 0:
+                with torch.no_grad():
+                    steps = self.get_steps()
+                    save_results(cfg, steps, epoch)
 
             data_t0 = time.time()
             # end of for loop

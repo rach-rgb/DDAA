@@ -12,20 +12,6 @@ from src.custom_networks.nets import LeNet, AlexCifarNet
 from src.custom_augment.aug_operations import apply_augment
 from src.custom_dataset.transform import valid_after_MNIST, valid_after_CIFAR
 
-# Terminal
-# from pathlib import Path
-# import os, sys, random, logging
-#
-# import torch
-# import torch.nn as nn
-# import torch.nn.functional as F
-#
-# sys.path.insert(0, '../src')
-# from projection import Projector
-# from custom_networks.nets import LeNet, AlexCifarNet
-# from custom_augment.aug_operations import apply_augment
-# from custom_dataset.transform import valid_after_MNIST, valid_after_CIFAR
-
 
 # Return Auto-Augmentation Module and Auto-Aug Parameter Optimizer
 # Args: device(str): CPU or CUDA, aug_cfg(Config): configuration for augmentation
@@ -152,9 +138,19 @@ class AugModule(nn.Module):
             return self.auto_exploit(img)
 
     # return auto-augment image
-    def auto_exploit(self, img):
+    def auto_exploit(self, img, need_grad=False):
         self.projector.eval()
-        with torch.no_grad():
+        if not need_grad:
+            with torch.no_grad():
+                prob, mag = self.get_params(img.to(self.device), self.temp)
+                op_indices = torch.topk(prob, self.k_ops, dim=0)[1]
+                aimg = img
+                for idx in op_indices:
+                    i = idx.item()
+                    m = perturb_param(mag[i].item(), self.delta)
+                    aimg = apply_augment(aimg, self.aug_list[i], m)
+                return aimg
+        else:
             prob, mag = self.get_params(img.to(self.device), self.temp)
             op_indices = torch.topk(prob, self.k_ops, dim=0)[1]
             aimg = img
@@ -169,8 +165,7 @@ class AugModule(nn.Module):
     def exploit(self, imgs):
         aug_imgs = []
         for img in imgs:
-            # torch.no_grad() ?
-            aug_imgs.append(self.auto_exploit(img))
+            aug_imgs.append(self.auto_exploit(img, True).to(self.device))
         return torch.stack(aug_imgs, dim=0)
 
     # return classification result of mixed feature validation image
