@@ -24,10 +24,12 @@ DISTILL:
   dd_augment: False
   save_output: True
   save_vis_output: False
+  save_ckpt: False
   output_dir: 'output'
   log_intv: 5  # log training loss every log_intv epoch
   val_intv: 30 # calculate validation loss every val_intv epoch
   vis_intv: 50  # export visualized output every vis_intv epoch
+  ckpt_intv: 1
   # hyperparameters of outer loop
   epochs: 200
   decay_epochs: 40
