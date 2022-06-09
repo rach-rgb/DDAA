@@ -28,11 +28,10 @@ def get_dataset(cfg):
 
     if cfg.DATA_SET.source == 'load':
         output_dir = os.path.join(Path(os.getcwd()).parent, 'output', 'augment-' + cfg.DATA_SET.name)
-
         train_dataset = AugDataset(output_dir)
         val_dataset = None
         logging.info("Train dataset loaded from %s", output_dir)
-    elif cfg.DATA_SET.train_split:  # source == Raw
+    elif cfg.DATA_SET.train_split:  # raw image
         train_idx, val_idx, _, _ = train_test_split(range(len(total_dataset)), total_dataset.targets,
                                                     stratify=total_dataset.targets, test_size=cfg.DATA_SET.val_size)
         train_dataset = RawDataset(cfg, total_dataset, mess=True, index=train_idx, transform=tr_train)
@@ -44,7 +43,7 @@ def get_dataset(cfg):
     return train_dataset, val_dataset
 
 
-# create custom dataset
+# custom dataset
 class RawDataset(data.Dataset):
     def __init__(self, cfg, dataset, mess, index=None, transform=None):
         x = dataset.data

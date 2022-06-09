@@ -118,17 +118,17 @@ class AugModule(nn.Module):
         self.delta = aug_cfg.delta
 
         # auto aug
-        self.loaded = loaded  # module is loaded i.e, already trained
+        self.loaded = loaded  # module is loaded
         self.extractor = ext
         self.projector = p
-        if aug_cfg.name == 'MNIST':     # normalization in explore pass
+        if aug_cfg.name == 'MNIST':
             self.transforms = valid_after_MNIST
         else:   # CIFAR-10
             self.transforms = valid_after_CIFAR
 
     # transformation
     def __call__(self, img):
-        if self.random_apply:   # return raw image
+        if self.random_apply:
             if random.random() > 0.5:
                 return img
 
