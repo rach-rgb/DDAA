@@ -11,6 +11,7 @@ TAUG:  # Train Data Augment
   name: 'CIFAR-10'
   aug_type: 'Auto'
   random_apply: True
+  start_ep: 0
   # hyper parameters
   search_intv: 3
   p_lr: 0.001
